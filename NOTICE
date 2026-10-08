@@ -1,0 +1,33 @@
+Verc
+Copyright (C) 2026 Verc contributors
+SPDX-License-Identifier: GPL-2.0-only
+
+Verc is free software. You can redistribute it and modify it under the GNU
+General Public License, version 2, as published by the Free Software Foundation.
+Verc comes without any warranty. See LICENSE for the full terms.
+
+Verc uses libVLC's public C API and VLC's subtitle filter interface. The
+standalone build includes selected VLC 3.x libraries and playback plugins.
+VLC and libVLC retain their own licenses and copyrights. Build-only plugin
+headers are from VLC 3.0.24; their LGPL license is in Vendor/VLC/COPYING.LIB.
+
+The standalone build copies part of the local VLC runtime. It does not fetch
+the corresponding source code. Before you distribute that build, provide the
+complete corresponding source and license notices for that exact VLC build and
+its dependencies, as their licenses require. Check the licenses of the copied
+plugins. Some VLC configurations contain GPL v3 components and are not suitable
+for a GPL v2-only distribution.
+
+VLC source: https://code.videolan.org/videolan/vlc
+VLC releases: https://download.videolan.org/pub/videolan/vlc/
+libVLC documentation: https://videolan.videolan.me/vlc-3.0/
+
+Verc uses Apple system frameworks and SF Symbols from macOS. Verc does not
+include separate SF Symbols font files. Apple terms apply to those resources.
+
+The animated drop icon adapts Material Line Icons by Vjacheslav Trushkin
+to native SwiftUI. Its MIT license is in LineMD-LICENSE.txt.
+Source: https://github.com/cyberalien/line-md
+
+VLC provides the playback reference. Vercel provides the visual reference.
+Verc has no affiliation with VideoLAN or Vercel.
