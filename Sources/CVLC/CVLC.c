@@ -4,6 +4,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdatomic.h>
+
+// Event types from libvlc_events.h.
+#define VC_EVENT_ERROR 0x10A    // libvlc_MediaPlayerEncounteredError
+#define VC_EVENT_ES_ADDED 0x114 // libvlc_MediaPlayerESAdded
 
 #define VLC_FUNCTIONS(X) \
     X(void *, new, (int, const char *const *)) \
@@ -11,6 +16,8 @@
     X(const char *, get_version, (void)) \
     X(void *, media_player_new, (void *)) \
     X(void, media_player_release, (void *)) \
+    X(void *, media_player_event_manager, (void *)) \
+    X(int, event_attach, (void *, int, void (*)(const void *, void *), void *)) \
     X(void *, media_new_location, (void *, const char *)) \
     X(void, media_release, (void *)) \
     X(void, media_player_set_media, (void *, void *)) \
@@ -34,7 +41,6 @@
     X(int, audio_set_track, (void *, int)) \
     X(int, video_set_spu, (void *, int)) \
     X(int, media_player_add_slave, (void *, unsigned, const char *, int)) \
-    X(int, video_set_spu_delay, (void *, int64_t)) \
     X(void, video_set_crop_geometry, (void *, const char *))
 
 struct VCEngine {
@@ -44,10 +50,16 @@ struct VCEngine {
     void *subtitleState;
     void (*subtitleRelease)(void *);
     void (*subtitleLayout)(void *, VCSubtitleLayout);
+    atomic_bool failed, playable;
 #define DECLARE(result, name, parameters) result (*name) parameters;
     VLC_FUNCTIONS(DECLARE)
 #undef DECLARE
 };
+
+static void set_flag(const void *event, void *flag) {
+    (void)event;
+    atomic_store((atomic_bool *)flag, true);
+}
 
 VCEngine *vc_create(const char *directory, char *error, int capacity) {
     VCEngine *engine = calloc(1, sizeof(*engine));
@@ -109,6 +121,10 @@ VCEngine *vc_create(const char *directory, char *error, int capacity) {
         free(engine);
         return NULL;
     }
+    // libVLC 3 reports "ended" for media that failed or had nothing to play, so record why it ended.
+    void *events = engine->media_player_event_manager(engine->player);
+    engine->event_attach(events, VC_EVENT_ERROR, set_flag, &engine->failed);
+    engine->event_attach(events, VC_EVENT_ES_ADDED, set_flag, &engine->playable);
     if (subtitlesAvailable) engine->subtitleState = subtitleCreate(engine->player);
     return engine;
 }
@@ -126,6 +142,8 @@ const char *vc_version(VCEngine *e) { return e->get_version(); }
 void vc_drawable(VCEngine *e, void *view) { e->media_player_set_nsobject(e->player, view); }
 int vc_open(VCEngine *e, const char *uri) {
     e->media_player_stop(e->player);
+    atomic_store(&e->failed, false);
+    atomic_store(&e->playable, false);
     void *media = e->media_new_location(e->instance, uri);
     if (!media) return -1;
     e->media_player_set_media(e->player, media);
@@ -135,6 +153,7 @@ int vc_open(VCEngine *e, const char *uri) {
 void vc_stop(VCEngine *e) { e->media_player_stop(e->player); }
 void vc_pause(VCEngine *e, int paused) { e->media_player_set_pause(e->player, paused); }
 int vc_state(VCEngine *e) { return e->media_player_get_state(e->player); }
+int vc_failed(VCEngine *e) { return atomic_load(&e->failed) || !atomic_load(&e->playable); }
 int64_t vc_time(VCEngine *e) { return e->media_player_get_time(e->player); }
 int64_t vc_duration(VCEngine *e) { return e->media_player_get_length(e->player); }
 int vc_seekable(VCEngine *e) { return e->media_player_is_seekable(e->player); }
@@ -155,7 +174,6 @@ int vc_select_track(VCEngine *e, int subtitles, int id) {
     return subtitles ? e->video_set_spu(e->player, id) : e->audio_set_track(e->player, id);
 }
 int vc_add_subtitle(VCEngine *e, const char *uri) { return e->media_player_add_slave(e->player, 0, uri, 1); }
-int vc_subtitle_delay(VCEngine *e, int64_t delay) { return e->video_set_spu_delay(e->player, delay); }
 void vc_crop(VCEngine *e, const char *geometry) { e->video_set_crop_geometry(e->player, geometry); }
 void vc_subtitle_layout(VCEngine *e, VCSubtitleLayout layout) {
     if (e->subtitleState) e->subtitleLayout(e->subtitleState, layout);

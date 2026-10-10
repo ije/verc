@@ -7,6 +7,7 @@ final class SubtitleSurface: NSView {
     var controlsVisible = false
     private var lastSize = CGSize.zero
     private var lastInset: CGFloat = 0
+    private var lastFontSize: CGFloat = 0
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
@@ -30,11 +31,14 @@ final class SubtitleSurface: NSView {
             let height = width / aspect
             rect = CGRect(x: rect.midX - width / 2, y: rect.midY - height / 2, width: width, height: height)
         }
-        let inset = controlsVisible && !player.isPictureInPicture ? max(20, 80 - (size.height - rect.maxY)) : 20
-        if lastSize != rect.size || lastInset != inset {
+        let scale = player.isPictureInPicture ? size.width / 1080 : 1
+        let fontSize = 32 * scale
+        let inset = controlsVisible && !player.isPictureInPicture ? max(20, 80 - (size.height - rect.maxY)) : 20 * scale
+        if lastSize != rect.size || lastInset != inset || lastFontSize != fontSize {
             lastSize = rect.size
             lastInset = inset
-            player.send(.subtitleLayout(width: rect.width, height: rect.height, bottomInset: inset))
+            lastFontSize = fontSize
+            player.send(.subtitleLayout(width: rect.width, height: rect.height, bottomInset: inset, fontSize: fontSize))
         }
     }
 }

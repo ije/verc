@@ -27,10 +27,10 @@ final class PlayerMenuView: NSView {
         ]
         if player.current != nil {
             items += [
-                PlayerMenuItem("Close Media") { player.stop() },
-                .separator(),
-                PlayerMenuItem(player.isPlaying ? "Pause" : "Play") { player.togglePlay() },
                 PlayerMenuItem("Add Subtitles…") { player.openFiles(subtitles: true) },
+                .separator(),
+                PlayerMenuItem("Stop") { player.stop() },
+                PlayerMenuItem(player.isPlaying ? "Pause" : "Play") { player.togglePlay() },
                 PlayerMenuItem("Video size", children: [
                     PlayerMenuItem("Fill window", checked: player.fillVideo) { player.fillVideo = true },
                     PlayerMenuItem("Fit entire video", checked: !player.fillVideo) { player.fillVideo = false }

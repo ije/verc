@@ -21,7 +21,7 @@ Use `--debug` for a debug build. To use another VLC copy, set `VERC_VLC_PATH` to
 Drop a media file onto the window, or double-click the empty window to open a file.
 A new file replaces the current file. Use **Open URL** for a direct media stream.
 
-Right-click for playback speed, repeat, and video size. Use the captions button for audio tracks, subtitles, and subtitle delay.
+Right-click for playback speed, repeat, and video size. Use the captions button for audio tracks and subtitles.
 The playback controls also include volume, Picture in Picture, and full screen.
 
 | Action | Shortcut |

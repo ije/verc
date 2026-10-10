@@ -1,5 +1,5 @@
 #pragma once
 
 typedef struct {
-    double width, height, bottomInset;
+    double width, height, bottomInset, fontSize;
 } VCSubtitleLayout;

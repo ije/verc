@@ -16,14 +16,12 @@ struct ContentView: View {
     @State private var hideTask: Task<Void, Never>?
     @State private var trackedMenus: Set<ObjectIdentifier> = []
     @State private var scrubbing = false
-    @State private var scrubTime = 0.0
     @State private var popup: PlayerPopup?
-    @State private var preferredSubtitleID: Int32?
     @FocusState private var popupFocused: Bool
     private var hasAudioChoice: Bool { player.audioTracks.lazy.filter { $0.id != -1 }.prefix(2).count > 1 }
     private var headerTitle: String {
         guard let current = player.current else { return "" }
-        return current.url.lastPathComponent + (player.speed == 1 ? "" : " · \(player.speed.formatted())×")
+        return (current.url.isFileURL ? current.url.lastPathComponent : current.title) + (player.speed == 1 ? "" : " · \(player.speed.formatted())×")
     }
 
     private var canvas: some View {
@@ -102,7 +100,7 @@ struct ContentView: View {
             revealControls()
         }
         .onChange(of: player.isPlaying) { revealControls() }
-        .onChange(of: player.current?.id) { popup = nil; preferredSubtitleID = nil; revealControls() }
+        .onChange(of: player.current?.id) { popup = nil; revealControls() }
         .onChange(of: popup) { revealControls() }
         .onChange(of: scenePhase) { if scenePhase != .active { popup = nil } }
         .onChange(of: player.showURL) { revealControls() }
@@ -215,6 +213,7 @@ struct ContentView: View {
             else { NSApp.keyWindow?.toggleFullScreen(nil) }
         }
         .onTapGesture { if player.current != nil { player.togglePlay(); revealControls() } }
+        .gesture(WindowDragGesture())
     }
 
     private var emptyState: some View {
@@ -236,22 +235,11 @@ struct ContentView: View {
             .anchorPreference(key: PopupAnchor.self, value: .bounds) { [.volume: $0] }
             Button { popup = popup == .tracks ? nil : .tracks } label: {
                 Image(systemName: "captions.bubble").font(.system(size: 16)).frame(width: 28, height: 32)
+                    .foregroundStyle(player.subtitleID == -1 ? .gray : .white.opacity(0.9))
             }
             .buttonStyle(.plain).help("Subtitles and audio tracks").accessibilityLabel("Subtitles and audio tracks")
             .anchorPreference(key: PopupAnchor.self, value: .bounds) { [.tracks: $0] }
-            Text(timeLabel(scrubbing ? scrubTime : player.time)).frame(minWidth: 38, alignment: .trailing)
-            SeekSlider(value: Binding(get: { scrubbing ? scrubTime : min(player.time, max(player.duration, 1)) }, set: {
-                scrubTime = $0
-                if !scrubbing { player.seek(to: $0) }
-            }), duration: max(player.duration, 1), enabled: player.seekable) { editing in
-                if editing { scrubTime = player.time }
-                scrubbing = editing
-                if !editing { player.seek(to: scrubTime) }
-                revealControls()
-            }
-            .frame(height: 16)
-            Text(player.duration > 0 ? timeLabel(player.duration) : "LIVE")
-                .frame(minWidth: 44, alignment: .leading)
+            Timeline(player: player, scrubbing: $scrubbing, editingChanged: revealControls)
             IconButton(symbol: player.isPictureInPicture ? "pip.exit" : "pip.enter", label: player.isPictureInPicture ? "Exit Picture in Picture" : "Picture in Picture", active: player.isPictureInPicture) { player.togglePictureInPicture() }
                 .disabled(!player.canPictureInPicture)
             IconButton(symbol: "arrow.up.left.and.arrow.down.right", label: "Full screen · ⌃⌘F") { NSApp.keyWindow?.toggleFullScreen(nil) }
@@ -274,55 +262,38 @@ struct ContentView: View {
 
     private var tracksPopover: some View {
         let subtitles = player.subtitleTracks.filter { $0.id != -1 }
-        let selection = Binding<Int32>(get: {
-            subtitles.first { $0.id == player.subtitleID }?.id
-                ?? subtitles.first { $0.id == preferredSubtitleID }?.id
-                ?? subtitles.first?.id ?? -1
-        }, set: {
-            preferredSubtitleID = $0
-            player.subtitleID = $0
-            player.send(.track($0, true))
-        })
         return VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 8) {
                 Text("Subtitles")
+                Spacer(minLength: 0)
                 Button { popup = nil; player.openFiles(subtitles: true) } label: {
                     Image(systemName: "plus").font(.system(size: 12))
                         .frame(width: 24, height: 24).contentShape(Circle())
                 }
                 .buttonStyle(.plain).glassEffect(.regular.interactive(), in: Circle())
                 .help("Add subtitles…").accessibilityLabel("Add subtitles")
-                Spacer(minLength: 0)
-                Toggle("Subtitles", isOn: Binding(get: { player.subtitleID != -1 }, set: { enabled in
-                    preferredSubtitleID = selection.wrappedValue
-                    let id = enabled ? selection.wrappedValue : -1
-                    player.subtitleID = id
-                    player.send(.track(id, true))
-                }))
-                .labelsHidden().toggleStyle(.switch).controlSize(.small)
-                .disabled(subtitles.isEmpty)
             }
             if !subtitles.isEmpty {
-                if subtitles.count > 1 {
-                    Picker("Track", selection: selection) {
+                HStack(spacing: 10) {
+                    Text("Track")
+                    Spacer(minLength: 0)
+                    Picker("Track", selection: Binding(get: { player.subtitleID }, set: {
+                        player.subtitleID = $0
+                        player.send(.track($0, true))
+                    })) {
+                        Text("Off").tag(Int32(-1))
                         ForEach(subtitles) { Text($0.name).tag($0.id) }
                     }
-                    .disabled(player.subtitleID == -1)
-                }
-                if player.subtitleID != -1 {
-                    HStack(spacing: 10) {
-                        Text("Delay")
-                        Slider(value: $player.subtitleDelay, in: -10...10, step: 0.5)
-                            .controlSize(.mini).accessibilityLabel("Subtitle delay")
-                            .accessibilityValue("\(player.subtitleDelay.formatted()) seconds")
-                        Text("\(player.subtitleDelay.formatted())s").frame(width: 38, alignment: .trailing)
-                    }.font(.system(size: 11, design: .monospaced)).monospacedDigit()
+                    .labelsHidden()
                 }
             }
             if hasAudioChoice {
                 Divider()
                 Text("Audio").font(.system(size: 11)).foregroundStyle(.secondary)
-                Picker("Track", selection: Binding(get: { player.audioID }, set: { player.send(.track($0, false)) })) {
+                Picker("Track", selection: Binding(get: { player.audioID }, set: {
+                    player.audioID = $0
+                    player.send(.track($0, false))
+                })) {
                     Text("Off").tag(Int32(-1))
                     ForEach(player.audioTracks.filter { $0.id != -1 }) { Text($0.name).tag($0.id) }
                 }
@@ -330,6 +301,32 @@ struct ContentView: View {
         }
         .font(.system(size: 12)).pickerStyle(.menu)
         .padding(22).frame(width: 280)
+    }
+}
+
+/// Reads `player.time` on its own so position updates redraw only the timeline, not the whole player.
+private struct Timeline: View {
+    let player: PlayerModel
+    @Binding var scrubbing: Bool
+    let editingChanged: () -> Void
+    @State private var scrubTime = 0.0
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(timeLabel(scrubbing ? scrubTime : player.time)).frame(minWidth: 38, alignment: .trailing)
+            SeekSlider(value: Binding(get: { scrubbing ? scrubTime : min(player.time, max(player.duration, 1)) }, set: {
+                scrubTime = $0
+                if !scrubbing { player.seek(to: $0) }
+            }), duration: max(player.duration, 1), enabled: player.seekable) { editing in
+                if editing { scrubTime = player.time }
+                scrubbing = editing
+                if !editing { player.seek(to: scrubTime) }
+                editingChanged()
+            }
+            .frame(height: 16)
+            Text(player.duration > 0 ? timeLabel(player.duration) : "LIVE")
+                .frame(minWidth: 44, alignment: .leading)
+        }
     }
 }
 
@@ -472,7 +469,7 @@ struct MediaInfo: View {
                 GridRow { Text("Format").foregroundStyle(.secondary); Text(player.current?.detail ?? "—") }
                 GridRow { Text("Duration").foregroundStyle(.secondary); Text(timeLabel(player.duration)) }
                 GridRow { Text("Resolution").foregroundStyle(.secondary); Text(player.videoWidth > 0 ? "\(player.videoWidth) × \(player.videoHeight)" : "—") }
-                GridRow { Text("Engine").foregroundStyle(.secondary); Text("libVLC \(player.engine?.version ?? "unavailable")") }
+                GridRow { Text("Engine").foregroundStyle(.secondary); Text("libVLC \(player.engineVersion ?? "unavailable")") }
                 GridRow { Text("License").foregroundStyle(.secondary); Text("GNU GPL v2.0") }
             }.font(.system(size: 12)).textSelection(.enabled)
             HStack { Spacer(); Button("Done") { player.showInfo = false }.keyboardShortcut(.defaultAction) }

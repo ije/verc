@@ -22,7 +22,7 @@ struct subpicture_updater_sys_t {
     subpicture_t *source;
     RegionPosition *positions;
     size_t count;
-    double height;
+    double height, fontSize;
     bool text;
 };
 
@@ -32,6 +32,7 @@ void *verc_subtitle_create(void *player) {
     pthread_mutex_init(&state->lock, NULL);
     atomic_init(&state->references, 1);
     state->layout.bottomInset = 20;
+    state->layout.fontSize = 32;
     var_Create((vlc_object_t *)player, "verc-subtitle-state", VLC_VAR_ADDRESS);
     var_SetAddress((vlc_object_t *)player, "verc-subtitle-state", state);
     return state;
@@ -119,7 +120,7 @@ static int Validate(subpicture_t *picture, bool srcChanged, const video_format_t
     pthread_mutex_lock(&sys->state->lock);
     VCSubtitleLayout layout = sys->state->layout;
     pthread_mutex_unlock(&sys->state->lock);
-    bool refresh = sys->text && layout.height != sys->height;
+    bool refresh = sys->text && (layout.height != sys->height || layout.fontSize != sys->fontSize);
     int result = VLC_SUCCESS;
     if (sys->source->updater.pf_validate) {
         sys->source->p_region = picture->p_region;
@@ -137,6 +138,7 @@ static void Capture(subpicture_t *picture) {
     VCSubtitleLayout layout = sys->state->layout;
     pthread_mutex_unlock(&sys->state->lock);
     sys->height = layout.height;
+    sys->fontSize = layout.fontSize;
     size_t count = 0;
     for (subpicture_region_t *r = picture->p_region; r; r = r->p_next) count++;
     RegionPosition *positions = realloc(sys->positions, count * sizeof(*positions));
@@ -151,7 +153,7 @@ static void Capture(subpicture_t *picture) {
             if (layout.height <= 0) continue;
             if (!text->style) text->style = text_style_Create(STYLE_NO_DEFAULTS);
             if (!text->style) continue;
-            text->style->i_font_size = lround(32.0 * picture->i_original_picture_height / layout.height);
+            text->style->i_font_size = lround(layout.fontSize * picture->i_original_picture_height / layout.height);
             text->style->f_font_relsize = 0;
         }
     }

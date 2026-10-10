@@ -41,6 +41,7 @@ const subtitlePlugin = Bun.spawnSync([
   "clang", "-dynamiclib", "-arch", "arm64", "-mmacosx-version-min=26.0", "-Os",
   "-D__PLUGIN__", "-DMODULE_NAME=vercsub", '-DMODULE_STRING="vercsub"',
   "-I", "Vendor/VLC/include", "-I", "Sources/CVLC/include", "-undefined", "dynamic_lookup",
+  "-install_name", "@rpath/libvercsub_plugin.dylib",
   "Plugins/Subtitle.c", "-o", join(destination, "plugins/libvercsub_plugin.dylib")
 ], { stderr: "inherit" });
 if (subtitlePlugin.exitCode !== 0) throw new Error("Cannot build the subtitle layout plugin.");

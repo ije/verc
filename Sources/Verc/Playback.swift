@@ -7,13 +7,13 @@ import UniformTypeIdentifiers
 struct MediaItem {
     let id = UUID()
     let url: URL
-    var title: String { url.isFileURL ? url.deletingPathExtension().lastPathComponent : url.lastPathComponent.isEmpty ? url.host ?? "Stream" : url.lastPathComponent }
+    var title: String { url.isFileURL ? url.deletingPathExtension().lastPathComponent : ["", "/"].contains(url.lastPathComponent) ? url.host ?? "Stream" : url.lastPathComponent }
     var isAudio: Bool { Self.audioExtensions.contains(url.pathExtension.lowercased()) }
     var isImage: Bool { UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true }
     var detail: String { url.isFileURL ? url.pathExtension.uppercased() : "STREAM" }
-    static let audioExtensions: Set<String> = ["mp3", "flac", "wav", "m4a", "aac", "ogg", "opus", "aiff", "aif", "wma", "alac"]
+    static let audioExtensions: Set<String> = ["mp3", "flac", "wav", "m4a", "aac", "opus", "aiff", "aif", "wma", "alac"]
     static let subtitleExtensions: Set<String> = ["srt", "vtt", "ass", "ssa", "sub", "idx", "ttml"]
-    static let streamSchemes: Set<String> = ["http", "https", "rtsp", "rtmp", "rtp", "udp", "srt"]
+    static let streamSchemes: Set<String> = ["http", "https", "rtsp", "rtp", "udp", "srt"]
 }
 
 struct MediaTrack: Identifiable, Equatable, Sendable {
@@ -37,23 +37,34 @@ struct PlaybackSnapshot: Sendable {
 
 enum PlaybackCommand: Sendable {
     case open(URL, UUID), pause(Bool), seek(Double), volume(Double), rate(Float)
-    case track(Int32, Bool), subtitle(URL), delay(Double), crop(String?), stop
-    case subtitleLayout(width: Double, height: Double, bottomInset: Double)
+    case track(Int32, Bool), subtitle(URL), crop(String?), stop
+    case subtitleLayout(width: Double, height: Double, bottomInset: Double, fontSize: Double)
 }
 
 final class VLC: @unchecked Sendable {
     private let queue = DispatchQueue(label: "app.verc.playback", qos: .userInitiated)
-    private let handle: OpaquePointer
+    private var handle: OpaquePointer?
     private var timer: DispatchSourceTimer?
     private var mediaID = UUID()
     private var closed = false
     private var externalSubtitles = false
     private var endTime: UInt64?
-    let version: String
     var onUpdate: (@Sendable (PlaybackSnapshot) -> Void)?
     var onError: (@Sendable (String) -> Void)?
 
-    init() throws {
+    /// Loads libVLC on the playback queue: it opens every bundled plugin, which would otherwise delay launch.
+    init(view address: UInt, onStart: @escaping @Sendable (Result<String, any Error>) -> Void) {
+        queue.async { [self] in
+            do {
+                let loaded = try Self.load()
+                vc_drawable(loaded, UnsafeMutableRawPointer(bitPattern: address))
+                handle = loaded
+                onStart(.success(String(cString: vc_version(loaded))))
+            } catch { onStart(.failure(error)) }
+        }
+    }
+
+    private static func load() throws -> OpaquePointer {
         guard let path = Bundle.main.privateFrameworksURL?.appendingPathComponent("VLC").path,
               FileManager.default.fileExists(atPath: path + "/lib/libvlc.dylib") else {
             throw NSError(domain: "Verc", code: 1, userInfo: [NSLocalizedDescriptionKey: "The bundled playback engine is missing. Rebuild or reinstall Verc."])
@@ -63,20 +74,12 @@ final class VLC: @unchecked Sendable {
             let failure = String(decoding: error.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
             throw NSError(domain: "Verc", code: 1, userInfo: [NSLocalizedDescriptionKey: failure])
         }
-        handle = loaded
-        version = String(cString: vc_version(loaded))
-    }
-
-    func attach(_ address: UInt) {
-        queue.async { [self] in
-            guard !closed else { return }
-            vc_drawable(handle, UnsafeMutableRawPointer(bitPattern: address))
-        }
+        return loaded
     }
 
     func send(_ command: PlaybackCommand) {
         queue.async { [self] in
-            guard !closed else { return }
+            guard !closed, let handle else { return }
             switch command {
             case let .open(url, id):
                 mediaID = id
@@ -104,9 +107,8 @@ final class VLC: @unchecked Sendable {
             case let .subtitle(url):
                 if vc_add_subtitle(handle, url.absoluteString) != 0 { onError?("This subtitle file could not be loaded.") }
                 else { externalSubtitles = true }
-            case let .delay(seconds): _ = vc_subtitle_delay(handle, Int64(seconds * 1_000_000))
-            case let .subtitleLayout(width, height, bottomInset):
-                vc_subtitle_layout(handle, VCSubtitleLayout(width: width, height: height, bottomInset: bottomInset))
+            case let .subtitleLayout(width, height, bottomInset, fontSize):
+                vc_subtitle_layout(handle, VCSubtitleLayout(width: width, height: height, bottomInset: bottomInset, fontSize: fontSize))
             case let .crop(geometry):
                 if let geometry { vc_crop(handle, geometry) }
                 else { vc_crop(handle, nil) }
@@ -118,6 +120,7 @@ final class VLC: @unchecked Sendable {
     }
 
     private func publish() {
+        guard let handle else { return }
         var width: UInt32 = 0
         var height: UInt32 = 0
         _ = vc_video_size(handle, &width, &height)
@@ -134,6 +137,7 @@ final class VLC: @unchecked Sendable {
             groups.append(tracks)
         }
         var state = vc_state(handle)
+        if state == 6 && vc_failed(handle) != 0 { state = 7 }
         let time = max(0, Double(vc_time(handle)) / 1000)
         let duration = max(0, Double(vc_duration(handle)) / 1000)
         let seekable = vc_seekable(handle) != 0
@@ -160,7 +164,7 @@ final class VLC: @unchecked Sendable {
                 closed = true
                 timer?.cancel()
                 timer = nil
-                vc_destroy(handle)
+                if let handle { vc_destroy(handle) }
             }
             completion()
         }
@@ -188,9 +192,6 @@ final class VLC: @unchecked Sendable {
     var speed: Float = 1 {
         didSet { send(.rate(speed)) }
     }
-    var subtitleDelay = 0.0 {
-        didSet { send(.delay(subtitleDelay)) }
-    }
     var repeatMedia = false
     var fillVideo = true { didSet { updateCrop() } }
     var viewport = CGSize.zero { didSet { updateCrop() } }
@@ -200,6 +201,7 @@ final class VLC: @unchecked Sendable {
     }
     var error: String?
     var engineError: String?
+    var engineVersion: String?
     var isPictureInPicture = false
     @ObservationIgnored let videoView = NSView()
     @ObservationIgnored private(set) var engine: VLC?
@@ -212,17 +214,25 @@ final class VLC: @unchecked Sendable {
     var isPlaying: Bool { state == 3 }
     var isLoading: Bool { current != nil && (state == 0 || state == 1 || state == 2) }
     init() {
-        do {
-            let engine = try VLC()
-            self.engine = engine
-            videoView.wantsLayer = true
-            videoView.layer?.backgroundColor = NSColor.black.cgColor
-            engine.attach(UInt(bitPattern: Unmanaged.passUnretained(videoView).toOpaque()))
-            engine.onError = { [weak self] message in Task { @MainActor in self?.error = message } }
-            engine.onUpdate = { [weak self] snapshot in
-                Task { @MainActor in self?.receive(snapshot) }
-            }
-        } catch { engineError = error.localizedDescription }
+        videoView.wantsLayer = true
+        videoView.layer?.backgroundColor = NSColor.black.cgColor
+        let engine = VLC(view: UInt(bitPattern: Unmanaged.passUnretained(videoView).toOpaque())) { [weak self] result in
+            Task { @MainActor in self?.engineStarted(result) }
+        }
+        engine.onError = { [weak self] message in Task { @MainActor in self?.error = message } }
+        engine.onUpdate = { [weak self] snapshot in
+            Task { @MainActor in self?.receive(snapshot) }
+        }
+        self.engine = engine
+    }
+
+    private func engineStarted(_ result: Result<String, any Error>) {
+        switch result {
+        case let .success(version): engineVersion = version
+        case let .failure(failure):
+            engineError = failure.localizedDescription
+            if current != nil { state = 7; error = engineError }
+        }
     }
 
     private func receive(_ snapshot: PlaybackSnapshot) {
@@ -299,7 +309,7 @@ final class VLC: @unchecked Sendable {
         var first: MediaItem?
         for url in media.prefix(1) {
             guard url.isFileURL || MediaItem.streamSchemes.contains(url.scheme?.lowercased() ?? "") else {
-                error = "Use a local file or an HTTP, HTTPS, RTSP, RTMP, RTP, UDP, or SRT stream."
+                error = "Use a local file or an HTTP, HTTPS, RTSP, RTP, UDP, or SRT stream."
                 continue
             }
             if url.isFileURL {
@@ -324,8 +334,10 @@ final class VLC: @unchecked Sendable {
     }
 
     private func play(_ item: MediaItem) {
-        endPictureInPicture()
-        if current?.id != item.id { externalSubtitles = [] }
+        if current?.id != item.id {
+            endPictureInPicture()
+            externalSubtitles = []
+        }
         current = item
         playbackID = UUID()
         state = 1
@@ -338,9 +350,8 @@ final class VLC: @unchecked Sendable {
         subtitleTracks = []
         audioID = -1
         subtitleID = -1
-        subtitleDelay = 0
         didStart = false
-        guard let engine else { state = 7; error = engineError ?? "The playback engine is unavailable."; return }
+        guard engineError == nil, let engine else { state = 7; error = engineError ?? "The playback engine is unavailable."; return }
         engine.send(.open(item.url, playbackID))
     }
 
