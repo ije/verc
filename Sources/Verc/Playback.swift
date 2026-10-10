@@ -4,14 +4,16 @@ import Foundation
 import Observation
 import UniformTypeIdentifiers
 
-struct MediaItem {
+struct MediaItem: Identifiable {
     let id = UUID()
     let url: URL
+    var duration: Double?
     var title: String { url.isFileURL ? url.deletingPathExtension().lastPathComponent : ["", "/"].contains(url.lastPathComponent) ? url.host ?? "Stream" : url.lastPathComponent }
-    var isAudio: Bool { Self.audioExtensions.contains(url.pathExtension.lowercased()) }
+    var isAudio: Bool { Self.audioExtensions.contains(url.pathExtension.lowercased()) || UTType(filenameExtension: url.pathExtension)?.conforms(to: .audio) == true }
     var isImage: Bool { UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true }
     var detail: String { url.isFileURL ? url.pathExtension.uppercased() : "STREAM" }
-    static let audioExtensions: Set<String> = ["mp3", "flac", "wav", "m4a", "aac", "opus", "aiff", "aif", "wma", "alac"]
+    static let audioExtensions: Set<String> = ["mp3", "flac", "wav", "m4a", "aac", "ogg", "oga", "opus", "aiff", "aif", "wma", "alac", "mka", "ape", "ac3", "dts", "amr", "au", "caf"]
+    static let videoExtensions: Set<String> = ["mp4", "mkv", "mov", "webm", "avi", "m4v", "mpg", "mpeg", "ts", "m2ts", "mts", "wmv", "flv", "vob", "ogv", "3gp", "3g2", "asf", "mxf", "rm", "rmvb", "divx", "dv", "m2v"]
     static let subtitleExtensions: Set<String> = ["srt", "vtt", "ass", "ssa", "sub", "idx", "ttml"]
     static let streamSchemes: Set<String> = ["http", "https", "rtsp", "rtp", "udp", "srt"]
 }
@@ -43,6 +45,7 @@ enum PlaybackCommand: Sendable {
 
 final class VLC: @unchecked Sendable {
     private let queue = DispatchQueue(label: "app.verc.playback", qos: .userInitiated)
+    private let metadataQueue = DispatchQueue(label: "app.verc.metadata", qos: .utility)
     private var handle: OpaquePointer?
     private var timer: DispatchSourceTimer?
     private var mediaID = UUID()
@@ -158,21 +161,38 @@ final class VLC: @unchecked Sendable {
         if state == 6 || state == 7 { timer?.schedule(deadline: .distantFuture) }
     }
 
+    func duration(of url: URL) async -> Double? {
+        await withCheckedContinuation { continuation in
+            queue.async { [self] in
+                guard !closed, handle != nil else { continuation.resume(returning: nil); return }
+                metadataQueue.async { [self] in
+                    let milliseconds = vc_read_duration(handle, url.absoluteString)
+                    continuation.resume(returning: milliseconds > 0 ? Double(milliseconds) / 1000 : nil)
+                }
+            }
+        }
+    }
+
     func shutdown(_ completion: @escaping @Sendable () -> Void) {
         queue.async { [self] in
             if !closed {
                 closed = true
                 timer?.cancel()
                 timer = nil
-                if let handle { vc_destroy(handle) }
             }
-            completion()
+            metadataQueue.async { [self] in
+                queue.async { [self] in
+                    if let handle { vc_destroy(handle); self.handle = nil }
+                    completion()
+                }
+            }
         }
     }
 }
 
 @MainActor @Observable final class PlayerModel {
     var current: MediaItem?
+    private(set) var playlist: [MediaItem] = []
     var state: Int32 = 0
     var time = 0.0
     var duration = 0.0
@@ -210,6 +230,7 @@ final class VLC: @unchecked Sendable {
     @ObservationIgnored private var didStart = false
     @ObservationIgnored private var playbackID = UUID()
     @ObservationIgnored private var pictureInPicture: PictureInPicture?
+    @ObservationIgnored private var durationTask: Task<Void, Never>?
     var canPictureInPicture: Bool { isPictureInPicture || (current != nil && videoWidth > 0 && videoHeight > 0) }
     var isPlaying: Bool { state == 3 }
     var isLoading: Bool { current != nil && (state == 0 || state == 1 || state == 2) }
@@ -241,6 +262,12 @@ final class VLC: @unchecked Sendable {
         state = snapshot.state
         time = snapshot.time
         duration = snapshot.duration
+        if snapshot.duration > 0 && current?.duration != snapshot.duration {
+            current?.duration = snapshot.duration
+            if let index = playlist.firstIndex(where: { $0.id == current?.id }) {
+                playlist[index].duration = snapshot.duration
+            }
+        }
         seekable = snapshot.seekable
         videoWidth = snapshot.width
         videoHeight = snapshot.height
@@ -261,8 +288,12 @@ final class VLC: @unchecked Sendable {
             ProcessInfo.processInfo.endActivity(activity)
             sleepActivity = nil
         }
-        if state == 6 && previous != 6 && repeatMedia { togglePlay() }
-        else if state == 7 && previous != 7 {
+        if state == 6 && previous != 6 {
+            if repeatMedia { togglePlay() }
+            else if let index = playlist.firstIndex(where: { $0.id == current?.id }), index + 1 < playlist.count {
+                play(playlist[index + 1])
+            }
+        } else if state == 7 && previous != 7 {
             error = "Verc could not play this media. The file may be damaged, or the stream may be unavailable."
         }
     }
@@ -293,8 +324,8 @@ final class VLC: @unchecked Sendable {
 
     func openFiles(subtitles: Bool = false) {
         let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = subtitles
-        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = !subtitles
         panel.title = subtitles ? "Add subtitles" : "Open media"
         if subtitles { panel.allowedContentTypes = MediaItem.subtitleExtensions.compactMap { UTType(filenameExtension: $0) } }
         panel.begin { [weak self] response in
@@ -305,9 +336,27 @@ final class VLC: @unchecked Sendable {
 
     func add(_ urls: [URL]) {
         let subtitles = urls.filter { MediaItem.subtitleExtensions.contains($0.pathExtension.lowercased()) }
-        let media = urls.lazy.filter { !MediaItem.subtitleExtensions.contains($0.pathExtension.lowercased()) }
-        var first: MediaItem?
-        for url in media.prefix(1) {
+        var media: [URL] = []
+        for url in urls where !MediaItem.subtitleExtensions.contains(url.pathExtension.lowercased()) {
+            var directory: ObjCBool = false
+            if url.isFileURL, FileManager.default.fileExists(atPath: url.path, isDirectory: &directory), directory.boolValue {
+                do {
+                    let files = try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles])
+                        .filter { file in
+                            guard (try? file.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { return false }
+                            let ext = file.pathExtension.lowercased()
+                            let type = UTType(filenameExtension: ext)
+                            return MediaItem.audioExtensions.contains(ext) || MediaItem.videoExtensions.contains(ext)
+                                || type?.conforms(to: .audio) == true || type?.conforms(to: .movie) == true
+                        }
+                        .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+                    if files.isEmpty { error = "No audio or video files were found in \(url.lastPathComponent)." }
+                    media.append(contentsOf: files)
+                } catch { self.error = "This folder is unavailable. Open a folder from its current location." }
+            } else { media.append(url) }
+        }
+        var items: [MediaItem] = []
+        for url in media {
             guard url.isFileURL || MediaItem.streamSchemes.contains(url.scheme?.lowercased() ?? "") else {
                 error = "Use a local file or an HTTP, HTTPS, RTSP, RTP, UDP, or SRT stream."
                 continue
@@ -319,12 +368,23 @@ final class VLC: @unchecked Sendable {
                     continue
                 }
             }
-            first = MediaItem(url: url)
+            items.append(MediaItem(url: url))
             if url.isFileURL { NSDocumentController.shared.noteNewRecentDocumentURL(url) }
         }
-        if let first {
+        if let first = items.first {
+            durationTask?.cancel()
+            playlist = items
             play(first)
             externalSubtitles = subtitles
+            durationTask = Task { [weak self, engine] in
+                guard items.count > 1, let engine else { return }
+                for (index, item) in items.enumerated() where item.url.isFileURL && !item.isImage {
+                    guard !Task.isCancelled else { return }
+                    let duration = await engine.duration(of: item.url)
+                    guard !Task.isCancelled, let self else { return }
+                    if let duration, playlist[index].duration == nil { playlist[index].duration = duration }
+                }
+            }
         } else if current != nil {
             for url in subtitles {
                 if !externalSubtitles.contains(url) { externalSubtitles.append(url) }
@@ -333,7 +393,7 @@ final class VLC: @unchecked Sendable {
         } else if !subtitles.isEmpty { error = "Open a video or audio file before adding subtitles." }
     }
 
-    private func play(_ item: MediaItem) {
+    func play(_ item: MediaItem) {
         if current?.id != item.id {
             endPictureInPicture()
             externalSubtitles = []
@@ -376,9 +436,12 @@ final class VLC: @unchecked Sendable {
     }
 
     func stop() {
+        durationTask?.cancel()
+        durationTask = nil
         endPictureInPicture()
         send(.stop)
         current = nil
+        playlist = []
         externalSubtitles = []
         state = 0
         time = 0

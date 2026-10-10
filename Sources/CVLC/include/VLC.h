@@ -1,6 +1,6 @@
 #pragma once
 #include <stdint.h>
-#include "VCSubtitle.h"
+#include "Subtitle.h"
 
 typedef struct VCEngine VCEngine;
 typedef struct VCTrack {
@@ -20,6 +20,7 @@ int vc_state(VCEngine *engine);
 int vc_failed(VCEngine *engine);
 int64_t vc_time(VCEngine *engine);
 int64_t vc_duration(VCEngine *engine);
+int64_t vc_read_duration(VCEngine *engine, const char *uri);
 int vc_seekable(VCEngine *engine);
 void vc_seek(VCEngine *engine, int64_t milliseconds);
 void vc_volume(VCEngine *engine, int volume);

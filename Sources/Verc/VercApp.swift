@@ -4,15 +4,16 @@ import SwiftUI
 @main
 struct VercApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+    @State private var showPlaylist = false
 
     var body: some Scene {
         Window("Verc", id: "player") {
-            ContentView(player: delegate.player)
+            ContentView(player: delegate.player, showPlaylist: $showPlaylist)
                 .frame(minWidth: 640, minHeight: 360)
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1080, height: 608)
-        .commands { PlayerCommands(player: delegate.player) }
+        .commands { PlayerCommands(player: delegate.player, showPlaylist: showPlaylist) }
     }
 }
 
@@ -46,6 +47,7 @@ struct VercApp: App {
 
 struct PlayerCommands: Commands {
     @Bindable var player: PlayerModel
+    let showPlaylist: Bool
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
@@ -60,10 +62,22 @@ struct PlayerCommands: Commands {
             Divider()
             Button("Back 10 Seconds") { player.seek(to: player.time - 10) }.keyboardShortcut(.leftArrow, modifiers: []).disabled(!player.seekable)
             Button("Forward 10 Seconds") { player.seek(to: player.time + 10) }.keyboardShortcut(.rightArrow, modifiers: []).disabled(!player.seekable)
+            if showPlaylist {
+                Button("Previous Media") {
+                    guard let index = player.playlist.firstIndex(where: { $0.id == player.current?.id }), index > 0 else { return }
+                    player.play(player.playlist[index - 1])
+                }.keyboardShortcut(.upArrow, modifiers: [])
+                Button("Next Media") {
+                    guard let index = player.playlist.firstIndex(where: { $0.id == player.current?.id }), index + 1 < player.playlist.count else { return }
+                    player.play(player.playlist[index + 1])
+                }.keyboardShortcut(.downArrow, modifiers: [])
+            }
             Divider()
             Toggle("Mute", isOn: $player.muted).keyboardShortcut("m", modifiers: [])
-            Button("Volume Up") { player.volume = min(1, player.volume + 0.05) }.keyboardShortcut(.upArrow, modifiers: [])
-            Button("Volume Down") { player.volume = max(0, player.volume - 0.05) }.keyboardShortcut(.downArrow, modifiers: [])
+            Button("Volume Up") { player.volume = min(1, player.volume + 0.05) }
+                .keyboardShortcut(showPlaylist ? nil : KeyboardShortcut(.upArrow, modifiers: []))
+            Button("Volume Down") { player.volume = max(0, player.volume - 0.05) }
+                .keyboardShortcut(showPlaylist ? nil : KeyboardShortcut(.downArrow, modifiers: []))
             Divider()
             Toggle("Repeat", isOn: $player.repeatMedia)
         }

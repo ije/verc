@@ -1,5 +1,6 @@
-#include "CVLC.h"
+#include "VLC.h"
 #include <dlfcn.h>
+#include <dispatch/dispatch.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +10,7 @@
 // Event types from libvlc_events.h.
 #define VC_EVENT_ERROR 0x10A    // libvlc_MediaPlayerEncounteredError
 #define VC_EVENT_ES_ADDED 0x114 // libvlc_MediaPlayerESAdded
+#define VC_EVENT_PARSED 3
 
 #define VLC_FUNCTIONS(X) \
     X(void *, new, (int, const char *const *)) \
@@ -18,8 +20,14 @@
     X(void, media_player_release, (void *)) \
     X(void *, media_player_event_manager, (void *)) \
     X(int, event_attach, (void *, int, void (*)(const void *, void *), void *)) \
+    X(void, event_detach, (void *, int, void (*)(const void *, void *), void *)) \
     X(void *, media_new_location, (void *, const char *)) \
     X(void, media_release, (void *)) \
+    X(void *, media_event_manager, (void *)) \
+    X(int, media_parse_with_options, (void *, int, int)) \
+    X(void, media_parse_stop, (void *)) \
+    X(int, media_get_parsed_status, (void *)) \
+    X(int64_t, media_get_duration, (void *)) \
     X(void, media_player_set_media, (void *, void *)) \
     X(void, media_player_set_nsobject, (void *, void *)) \
     X(int, media_player_play, (void *)) \
@@ -59,6 +67,11 @@ struct VCEngine {
 static void set_flag(const void *event, void *flag) {
     (void)event;
     atomic_store((atomic_bool *)flag, true);
+}
+
+static void parsed_media(const void *event, void *signal) {
+    (void)event;
+    dispatch_semaphore_signal(signal);
 }
 
 VCEngine *vc_create(const char *directory, char *error, int capacity) {
@@ -156,6 +169,25 @@ int vc_state(VCEngine *e) { return e->media_player_get_state(e->player); }
 int vc_failed(VCEngine *e) { return atomic_load(&e->failed) || !atomic_load(&e->playable); }
 int64_t vc_time(VCEngine *e) { return e->media_player_get_time(e->player); }
 int64_t vc_duration(VCEngine *e) { return e->media_player_get_length(e->player); }
+int64_t vc_read_duration(VCEngine *e, const char *uri) {
+    void *media = e->media_new_location(e->instance, uri);
+    if (!media) return -1;
+    int64_t duration = -1;
+    void *events = e->media_event_manager(media);
+    dispatch_semaphore_t signal = dispatch_semaphore_create(0);
+    if (e->event_attach(events, VC_EVENT_PARSED, parsed_media, signal) == 0) {
+        if (e->media_parse_with_options(media, 0, 3000) == 0 &&
+            dispatch_semaphore_wait(signal, dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC)) == 0 &&
+            e->media_get_parsed_status(media) == 4) {
+            duration = e->media_get_duration(media);
+        }
+        e->media_parse_stop(media);
+        e->event_detach(events, VC_EVENT_PARSED, parsed_media, signal);
+    }
+    dispatch_release(signal);
+    e->media_release(media);
+    return duration;
+}
 int vc_seekable(VCEngine *e) { return e->media_player_is_seekable(e->player); }
 void vc_seek(VCEngine *e, int64_t time) { e->media_player_set_time(e->player, time); }
 void vc_volume(VCEngine *e, int volume) { e->audio_set_volume(e->player, volume); }

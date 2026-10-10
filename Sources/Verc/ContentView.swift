@@ -8,6 +8,7 @@ enum Theme {
 
 struct ContentView: View {
     @Bindable var player: PlayerModel
+    @Binding var showPlaylist: Bool
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("appearance") private var appearance = "System"
     @State private var dropTargeted = false
@@ -17,7 +18,9 @@ struct ContentView: View {
     @State private var trackedMenus: Set<ObjectIdentifier> = []
     @State private var scrubbing = false
     @State private var popup: PlayerPopup?
-    @FocusState private var popupFocused: Bool
+    @FocusState private var playlistFocused: Bool
+    @State private var isFullScreen = false
+
     private var hasAudioChoice: Bool { player.audioTracks.lazy.filter { $0.id != -1 }.prefix(2).count > 1 }
     private var headerTitle: String {
         guard let current = player.current else { return "" }
@@ -25,6 +28,22 @@ struct ContentView: View {
     }
 
     private var canvas: some View {
+        playerCanvas
+        .overlay(alignment: .trailing) {
+            if showPlaylist && player.playlist.count > 1 {
+                playlistSidebar
+                    .padding(12)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(WindowChrome(title: headerTitle, controlsVisible: controlsVisible).frame(width: 0, height: 0))
+        .ignoresSafeArea()
+        .preferredColorScheme(player.current != nil ? .dark : appearance == "Light" ? .light : appearance == "Dark" ? .dark : nil)
+        .tint(.primary)
+    }
+
+    private var playerCanvas: some View {
         ZStack {
             stage
             if player.current != nil {
@@ -41,10 +60,14 @@ struct ContentView: View {
                 Spacer(minLength: 0)
                 if player.current != nil { transport }
             }
+            .padding(.trailing, showPlaylist && player.playlist.count > 1 ? 304 : 0)
             .opacity(controlsVisible ? 1 : 0)
             .allowsHitTesting(controlsVisible)
             if player.current?.isImage == false && !player.isPictureInPicture && !player.isPlaying && !player.isLoading && player.state != 7 {
-                Button { player.togglePlay() } label: {
+                Button {
+                    if showPlaylist { withAnimation(.easeInOut(duration: 0.2)) { showPlaylist = false } }
+                    else { player.togglePlay() }
+                } label: {
                     Image(systemName: player.state == 6 ? "arrow.counterclockwise" : "play.fill")
                         .font(.system(size: 52, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.9))
@@ -53,48 +76,18 @@ struct ContentView: View {
                         .shadow(color: .black.opacity(0.3), radius: 12, y: 2)
                 }
                 .buttonStyle(.plain).accessibilityLabel(player.state == 6 ? "Replay" : "Play")
+                .padding(.trailing, showPlaylist && player.playlist.count > 1 ? 304 : 0)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
         .background(player.current == nil ? Theme.surface : .black)
-        .background(WindowChrome(title: headerTitle, controlsVisible: controlsVisible).frame(width: 0, height: 0))
-        .overlayPreferenceValue(PopupAnchor.self) { anchors in
-            GeometryReader { geometry in
-                if let popup, let anchor = anchors[popup] {
-                    let button = geometry[anchor]
-                    let width: CGFloat = popup == .volume ? 56 : 280
-                    let left = min(max(button.midX - width / 2, 12), geometry.size.width - width - 12)
-                    Color.clear.contentShape(Rectangle())
-                        .onTapGesture { self.popup = nil }
-                        .accessibilityHidden(true)
-                    Group {
-                        if popup == .volume { volumePopover }
-                        else { tracksPopover }
-                    }
-                    .padding(.bottom, 7)
-                    .glassEffect(.regular.tint(.black.opacity(0.35)), in: PopupShape(arrowX: button.midX - left))
-                    .preferredColorScheme(.dark)
-                    .fixedSize()
-                    .focusable().focused($popupFocused).focusEffectDisabled()
-                    .onExitCommand { self.popup = nil }
-                    .onAppear { popupFocused = true }
-                    .frame(width: width)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                    .padding(.leading, left)
-                    .padding(.bottom, geometry.size.height - button.minY + 6)
-                }
-            }
-            .allowsHitTesting(popup != nil)
-        }
         .onGeometryChange(for: CGSize.self) { $0.size } action: { player.viewport = $0 }
-        .ignoresSafeArea()
-        .preferredColorScheme(player.current != nil ? .dark : appearance == "Light" ? .light : appearance == "Dark" ? .dark : nil)
-        .tint(.primary)
+        .overlay { PlayerContextMenu(player: player) }
     }
 
     private var interactiveCanvas: some View {
         canvas
-        .overlay { PlayerContextMenu(player: player) }
         .onContinuousHover { phase in
             if case .ended = phase { chromeHovered = false }
             revealControls()
@@ -105,6 +98,8 @@ struct ContentView: View {
         .onChange(of: scenePhase) { if scenePhase != .active { popup = nil } }
         .onChange(of: player.showURL) { revealControls() }
         .onChange(of: player.showInfo) { revealControls() }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in isFullScreen = true }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in isFullScreen = false }
         .onReceive(NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)) { notification in
             if let menu = notification.object as? NSMenu { trackedMenus.insert(ObjectIdentifier(menu)) }
             hideTask?.cancel()
@@ -157,7 +152,7 @@ struct ContentView: View {
     private func revealControls() {
         hideTask?.cancel()
         controlsVisible = true
-        guard player.isPlaying, !chromeHovered, !scrubbing, popup == nil, trackedMenus.isEmpty, !player.showURL, !player.showInfo else { return }
+        guard player.isPlaying, !chromeHovered, !scrubbing, popup == nil, !showPlaylist, trackedMenus.isEmpty, !player.showURL, !player.showInfo else { return }
         hideTask = Task {
             do { try await Task.sleep(for: .seconds(2.5)) } catch { return }
             withAnimation(.easeOut(duration: 0.2)) { controlsVisible = false }
@@ -173,7 +168,70 @@ struct ContentView: View {
         .frame(maxWidth: .infinity).frame(height: 32)
         .contentShape(Rectangle())
         .gesture(WindowDragGesture())
+        .overlay(alignment: .trailing) {
+            if player.playlist.count > 1 && !showPlaylist {
+                IconButton(symbol: "list.triangle", label: "Show playlist") {
+                    popup = nil
+                    withAnimation(.easeInOut(duration: 0.2)) { showPlaylist = true }
+                }
+                .padding(.trailing, 12)
+            }
+        }
+        .onChange(of: player.playlist.count) { if player.playlist.count < 2 { showPlaylist = false } }
+        .onChange(of: showPlaylist) { revealControls() }
         .onHover { chromeHovered = $0; revealControls() }
+    }
+
+    private var playlistSidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Label("Playlist", systemImage: "list.triangle").font(.system(size: 13, weight: .semibold))
+                Spacer()
+                Text(player.playlist.count.formatted()).font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            .padding(16)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 4) {
+                        ForEach(player.playlist) { item in
+                            let selected = player.current?.id == item.id
+                            Button {
+                                if !selected { player.play(item) }
+                                withAnimation(.easeInOut(duration: 0.2)) { showPlaylist = false }
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: selected ? "play.fill" : item.isImage ? "photo" : item.isAudio ? "music.note" : "film")
+                                        .font(.system(size: 16)).frame(width: 22)
+                                        .foregroundStyle(selected ? Color.white : .secondary)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(item.title).font(.system(size: 12, weight: .medium))
+                                            .lineLimit(1).truncationMode(.tail)
+                                        PlaylistTime(player: player, duration: item.duration, selected: selected)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                                .background(.primary.opacity(selected ? 0.12 : 0), in: RoundedRectangle(cornerRadius: 10))
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .help(item.url.isFileURL ? item.url.path : item.url.absoluteString)
+                            .accessibilityAddTraits(selected ? [.isSelected] : [])
+                            .id(item.id)
+                        }
+                    }
+                    .padding(.horizontal, 8).padding(.bottom, 8)
+                }
+                .onAppear { if let id = player.current?.id { proxy.scrollTo(id) } }
+                .onChange(of: player.current?.id) { if let id = player.current?.id { proxy.scrollTo(id) } }
+            }
+        }
+        .frame(width: 280)
+        .frame(maxHeight: .infinity)
+        .glassEffect(.regular.tint(.black.opacity(0.25)), in: .rect(corners: .concentric(minimum: .fixed(8)), isUniform: true))
+        .focusable().focused($playlistFocused).focusEffectDisabled()
+        .onAppear { playlistFocused = true }
+        .onExitCommand { withAnimation(.easeInOut(duration: 0.2)) { showPlaylist = false } }
     }
 
     private var stage: some View {
@@ -209,16 +267,20 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped().contentShape(Rectangle())
         .onTapGesture(count: 2) {
-            if player.current == nil { player.openFiles() }
+            if showPlaylist { withAnimation(.easeInOut(duration: 0.2)) { showPlaylist = false } }
+            else if player.current == nil { player.openFiles() }
             else { NSApp.keyWindow?.toggleFullScreen(nil) }
         }
-        .onTapGesture { if player.current != nil { player.togglePlay(); revealControls() } }
+        .onTapGesture {
+            if showPlaylist { withAnimation(.easeInOut(duration: 0.2)) { showPlaylist = false } }
+            else if player.current != nil { player.togglePlay(); revealControls() }
+        }
         .gesture(WindowDragGesture())
     }
 
     private var emptyState: some View {
         VStack(spacing: 0) {
-            DropIcon().foregroundStyle(.primary).opacity(0.48).padding(.bottom, 12)
+            LiquidPlayIcon().padding(.bottom, 16)
             Text("Drop media here or double-click to open.").font(.system(size: 14)).foregroundStyle(.gray)
             if let message = player.engineError {
                 Label(message, systemImage: "exclamationmark.circle").font(.system(size: 11)).foregroundStyle(.orange).padding(.top, 20)
@@ -232,17 +294,27 @@ struct ContentView: View {
                 Image(systemName: player.muted || player.volume == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill").font(.system(size: 15)).frame(width: 28, height: 32)
             }
             .buttonStyle(.plain).help("Volume · M to mute").accessibilityLabel("Volume settings")
-            .anchorPreference(key: PopupAnchor.self, value: .bounds) { [.volume: $0] }
+            .popover(isPresented: Binding(get: { popup == .volume }, set: {
+                if $0 { popup = .volume }
+                else if popup == .volume { popup = nil }
+            }), arrowEdge: .top) {
+                volumePopover.preferredColorScheme(.dark).fixedSize()
+            }
             Button { popup = popup == .tracks ? nil : .tracks } label: {
                 Image(systemName: "captions.bubble").font(.system(size: 16)).frame(width: 28, height: 32)
                     .foregroundStyle(player.subtitleID == -1 ? .gray : .white.opacity(0.9))
             }
             .buttonStyle(.plain).help("Subtitles and audio tracks").accessibilityLabel("Subtitles and audio tracks")
-            .anchorPreference(key: PopupAnchor.self, value: .bounds) { [.tracks: $0] }
+            .popover(isPresented: Binding(get: { popup == .tracks }, set: {
+                if $0 { popup = .tracks }
+                else if popup == .tracks { popup = nil }
+            }), arrowEdge: .top) {
+                tracksPopover.preferredColorScheme(.dark).fixedSize()
+            }
             Timeline(player: player, scrubbing: $scrubbing, editingChanged: revealControls)
             IconButton(symbol: player.isPictureInPicture ? "pip.exit" : "pip.enter", label: player.isPictureInPicture ? "Exit Picture in Picture" : "Picture in Picture", active: player.isPictureInPicture) { player.togglePictureInPicture() }
                 .disabled(!player.canPictureInPicture)
-            IconButton(symbol: "arrow.up.left.and.arrow.down.right", label: "Full screen · ⌃⌘F") { NSApp.keyWindow?.toggleFullScreen(nil) }
+            IconButton(symbol: isFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right", label: isFullScreen ? "Exit full screen · ⌃⌘F" : "Full screen · ⌃⌘F") { NSApp.keyWindow?.toggleFullScreen(nil) }
         }
         .font(.system(size: 11, weight: .medium, design: .monospaced)).monospacedDigit()
         .foregroundStyle(.white.opacity(0.9))
@@ -304,6 +376,17 @@ struct ContentView: View {
     }
 }
 
+private struct PlaylistTime: View {
+    let player: PlayerModel
+    let duration: Double?
+    let selected: Bool
+
+    var body: some View {
+        Text((selected ? "\(timeLabel(player.time)) / " : "") + (duration.map(timeLabel) ?? "—"))
+            .font(.system(size: 10)).monospacedDigit().foregroundStyle(.secondary)
+    }
+}
+
 /// Reads `player.time` on its own so position updates redraw only the timeline, not the whole player.
 private struct Timeline: View {
     let player: PlayerModel
@@ -331,29 +414,6 @@ private struct Timeline: View {
 }
 
 private enum PlayerPopup { case volume, tracks }
-
-private struct PopupAnchor: PreferenceKey {
-    static let defaultValue: [PlayerPopup: Anchor<CGRect>] = [:]
-    static func reduce(value: inout [PlayerPopup: Anchor<CGRect>], nextValue: () -> [PlayerPopup: Anchor<CGRect>]) {
-        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
-    }
-}
-
-private struct PopupShape: Shape {
-    var arrowX: CGFloat
-
-    func path(in rect: CGRect) -> Path {
-        let bottom = rect.maxY - 7
-        let body = Path(roundedRect: CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height - 7), cornerRadius: 10)
-        var arrow = Path()
-        arrow.move(to: CGPoint(x: arrowX - 9, y: bottom - 1))
-        arrow.addLine(to: CGPoint(x: arrowX - 1, y: bottom + 6))
-        arrow.addQuadCurve(to: CGPoint(x: arrowX + 1, y: bottom + 6), control: CGPoint(x: arrowX, y: bottom + 7))
-        arrow.addLine(to: CGPoint(x: arrowX + 9, y: bottom - 1))
-        arrow.closeSubpath()
-        return body.union(arrow)
-    }
-}
 
 struct IconButton: View {
     let symbol: String
@@ -472,7 +532,7 @@ struct MediaInfo: View {
                 GridRow { Text("Engine").foregroundStyle(.secondary); Text("libVLC \(player.engineVersion ?? "unavailable")") }
                 GridRow { Text("License").foregroundStyle(.secondary); Text("GNU GPL v2.0") }
             }.font(.system(size: 12)).textSelection(.enabled)
-            HStack { Spacer(); Button("Done") { player.showInfo = false }.keyboardShortcut(.defaultAction) }
+            HStack { Spacer(); Button("Done") { player.showInfo = false }.buttonStyle(.glass).keyboardShortcut(.defaultAction) }
         }
         .padding(28).frame(width: 430)
         .glassEffect(.clear.tint(.black.opacity(0.25)), in: RoundedRectangle(cornerRadius: 20))
