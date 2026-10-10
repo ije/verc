@@ -118,12 +118,19 @@ struct ContentView: View {
         .onDisappear { hideTask?.cancel() }
         .overlay {
             if dropTargeted {
-                RoundedRectangle(cornerRadius: 12).stroke(.white, style: StrokeStyle(lineWidth: 2, dash: [8, 5])).padding(8)
-                    .overlay {
+                Group {
+                    if player.current == nil {
+                        RoundedRectangle(cornerRadius: 12)
+                            .strokeBorder(Theme.muted, style: StrokeStyle(lineWidth: 2, dash: [8, 5]))
+                            .padding(8)
+                            .ignoresSafeArea()
+                    } else {
                         HStack(spacing: 12) { DropIcon(); Text("Drop to play") }
-                            .font(.title2.weight(.medium)).padding(24).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                            .font(.title2.weight(.medium)).foregroundStyle(.white).padding(24)
+                            .glassEffect(.regular.tint(.black.opacity(0.35)), in: RoundedRectangle(cornerRadius: 12))
                     }
-                    .allowsHitTesting(false)
+                }
+                .allowsHitTesting(false)
             }
         }
         .dropDestination(for: URL.self) { urls, _ in player.add(urls); return !urls.isEmpty } isTargeted: { dropTargeted = $0 }
@@ -213,7 +220,7 @@ struct ContentView: View {
     private var emptyState: some View {
         VStack(spacing: 0) {
             DropIcon().foregroundStyle(.primary).opacity(0.48).padding(.bottom, 12)
-            Text("Drop media here or double-click to open a file.").font(.system(size: 14)).foregroundStyle(.gray)
+            Text("Drop media here or double-click to open.").font(.system(size: 14)).foregroundStyle(.gray)
             if let message = player.engineError {
                 Label(message, systemImage: "exclamationmark.circle").font(.system(size: 11)).foregroundStyle(.orange).padding(.top, 20)
             }
