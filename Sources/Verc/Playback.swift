@@ -211,7 +211,7 @@ final class VLC: @unchecked Sendable {
     var subtitleTracks: [MediaTrack] = []
     var audioID: Int32 = -1
     var subtitleID: Int32 = -1
-    var subtitleFontSize = 32.0 {
+    var subtitleFontSize = 36.0 {
         didSet { (videoView.superview as? SubtitleSurface)?.updateSubtitleLayout() }
     }
     var subtitleBottomInset = 42.0 {

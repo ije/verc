@@ -122,7 +122,6 @@ VCEngine *vc_create(const char *directory, char *error, int capacity) {
         "--no-keyboard-events", "--no-snapshot-preview", "--quiet",
         "--videotoolbox", "--videotoolbox-hw-decoder-only", "--avcodec-hw=any",
         "--vout=macosx", "--aout=auhal",
-        "--text-renderer=verctext",
         subtitlesAvailable ? "--sub-filter=vercsub" : "--sub-filter="
     };
     engine->instance = engine->new(sizeof(options) / sizeof(options[0]), options);

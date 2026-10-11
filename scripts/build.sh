@@ -72,7 +72,6 @@ done <<< "$plugins"
 clang -dynamiclib -arch arm64 -mmacosx-version-min=26.0 -Os \
   -D__PLUGIN__ -DMODULE_NAME=vercsub '-DMODULE_STRING="vercsub"' \
   -I Vendor/VLC/include -I Sources/CVLC/include -undefined dynamic_lookup \
-  -framework CoreText -framework CoreGraphics \
   -install_name @rpath/libvercsub_plugin.dylib \
   Sources/CVLC/Subtitle.c -o "$destination/plugins/libvercsub_plugin.dylib" \
   || fail "Cannot build the subtitle layout plugin."
