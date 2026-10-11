@@ -181,7 +181,7 @@ struct ContentView: View {
                 }
                 .padding(.trailing, 12)
             } else if player.current == nil {
-                GlassIconButton(symbol: "info", label: "About the prism", size: 18) {
+                GlassIconButton(symbol: "info", label: "About Verc", size: 18) {
                     popup = popup == .credits ? nil : .credits
                 }
                 .popover(isPresented: Binding(get: { popup == .credits }, set: {
@@ -378,12 +378,22 @@ struct ContentView: View {
 
     private var creditsPopover: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Prism").font(.system(size: 13, weight: .semibold))
-            Text("This shader is borrowed from the vgpu.sh home page by Vercel, ported from WebGPU to Metal.")
+            Text("VLC").font(.system(size: 13, weight: .semibold))
+            Text("Verc uses VLC by VideoLAN for media playback.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 6) {
-                Link("vgpu.sh", destination: URL(string: "https://vgpu.sh")!)
+                CreditLink(label: "videolan.org", destination: URL(string: "https://www.videolan.org/vlc/")!)
+                Text("·").foregroundStyle(.tertiary)
+                Text("GPL / LGPL").foregroundStyle(.secondary)
+            }
+            Divider().padding(.vertical, 4)
+            Text("Prism Shader").font(.system(size: 13, weight: .semibold))
+            Text("The prism shader is borrowed from the vgpu.sh home page by Vercel.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 6) {
+                CreditLink(label: "vgpu.sh", destination: URL(string: "https://vgpu.sh")!)
                 Text("·").foregroundStyle(.tertiary)
                 Text("MIT License").foregroundStyle(.secondary)
             }
@@ -484,6 +494,18 @@ private struct Timeline: View {
 }
 
 private enum PlayerPopup { case volume, tracks, credits }
+
+private struct CreditLink: View {
+    let label: String
+    let destination: URL
+    @State private var hovered = false
+
+    var body: some View {
+        Link(destination: destination) {
+            Text(label).foregroundStyle(.secondary).underline(hovered)
+        }.buttonStyle(.plain).onHover { hovered = $0 }
+    }
+}
 
 private struct GlassIconButton: View {
     let symbol: String
