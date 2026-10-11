@@ -17,6 +17,7 @@ struct ContentView: View {
     @State private var trackedMenus: Set<ObjectIdentifier> = []
     @State private var scrubbing = false
     @State private var popup: PlayerPopup?
+    @State private var playlistSelection: UUID?
     @FocusState private var playlistFocused: Bool
     @State private var isFullScreen = false
 
@@ -135,19 +136,19 @@ struct ContentView: View {
 
     var body: some View {
         interactiveCanvas
-        .disabled(player.showInfo)
-        .allowsHitTesting(!player.showInfo)
-        .accessibilityHidden(player.showInfo)
+        .disabled(player.showInfo || player.showURL)
+        .allowsHitTesting(!player.showInfo && !player.showURL)
+        .accessibilityHidden(player.showInfo || player.showURL)
         .overlay {
-            if player.showInfo {
+            if player.showInfo || player.showURL {
                 ZStack {
                     Color.black.opacity(0.18).ignoresSafeArea().accessibilityHidden(true)
-                    MediaInfo(player: player)
+                    if player.showURL { StreamDialog(player: player) }
+                    else { MediaInfo(player: player) }
                 }
                 .preferredColorScheme(.dark)
             }
         }
-        .sheet(isPresented: $player.showURL) { StreamSheet(player: player) }
         .alert("Unable to complete action", isPresented: Binding<Bool>(get: { player.error != nil }, set: { if !$0 { player.error = nil } })) {
             Button("OK") { player.error = nil }
         } message: { Text(player.error ?? "") }
@@ -209,19 +210,20 @@ struct ContentView: View {
                 ScrollView {
                     LazyVStack(spacing: 4) {
                         ForEach(player.playlist) { item in
-                            let selected = player.current?.id == item.id
+                            let playing = player.current?.id == item.id
+                            let selected = playlistSelection == item.id
                             Button {
-                                if !selected { player.play(item) }
+                                if !playing { player.play(item) }
                                 showPlaylist = false
                             } label: {
                                 HStack(spacing: 12) {
-                                    Image(systemName: selected ? "play.fill" : item.isImage ? "photo" : item.isAudio ? "music.note" : "film")
+                                    Image(systemName: playing ? "play.fill" : item.isImage ? "photo" : item.isAudio ? "music.note" : "film")
                                         .font(.system(size: 16)).frame(width: 22)
-                                        .foregroundStyle(selected ? Color.white : .secondary)
+                                        .foregroundStyle(playing ? Color.white : .secondary)
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(item.title).font(.system(size: 12, weight: .medium))
                                             .lineLimit(1).truncationMode(.tail)
-                                        PlaylistTime(player: player, duration: item.duration, selected: selected)
+                                        PlaylistTime(player: player, duration: item.duration, selected: playing)
                                     }
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                 }
@@ -238,14 +240,34 @@ struct ContentView: View {
                     .padding(.horizontal, 8).padding(.bottom, 8)
                 }
                 .onChange(of: playlistVisible) { if playlistVisible, let id = player.current?.id { proxy.scrollTo(id) } }
-                .onChange(of: player.current?.id) { if let id = player.current?.id { proxy.scrollTo(id) } }
+                .onChange(of: playlistSelection) { if playlistVisible, let id = playlistSelection { proxy.scrollTo(id) } }
             }
         }
         .frame(width: 280)
         .frame(maxHeight: .infinity)
         .glassEffect(.regular.tint(.black.opacity(0.25)), in: .rect(corners: .concentric(minimum: .fixed(8)), isUniform: true))
         .focusable(playlistVisible).focused($playlistFocused).focusEffectDisabled()
-        .onChange(of: playlistVisible) { playlistFocused = playlistVisible }
+        .onChange(of: playlistVisible) {
+            playlistFocused = playlistVisible
+            if playlistVisible { playlistSelection = player.current?.id }
+        }
+        .onChange(of: player.current?.id) {
+            if !player.playlist.contains(where: { $0.id == playlistSelection }) { playlistSelection = player.current?.id }
+        }
+        .onKeyPress(keys: [.upArrow, .downArrow]) { press in
+            guard playlistVisible,
+                  let index = player.playlist.firstIndex(where: { $0.id == playlistSelection }) else { return .ignored }
+            let next = min(max(index + (press.key == .upArrow ? -1 : 1), 0), player.playlist.count - 1)
+            playlistSelection = player.playlist[next].id
+            return .handled
+        }
+        .onKeyPress(.return) {
+            guard playlistVisible, let item = player.playlist.first(where: { $0.id == playlistSelection }) else { return .ignored }
+            if player.current?.id != item.id { player.play(item) }
+            else if !player.isPlaying { player.togglePlay() }
+            showPlaylist = false
+            return .handled
+        }
         .onExitCommand { showPlaylist = false }
     }
 
@@ -495,7 +517,7 @@ struct IconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol).font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Color.primary.opacity(hovered || active ? 1 : 0.8))
+                .foregroundStyle(.white.opacity(hovered || active ? 1 : 0.9))
                 .frame(width: 28, height: 32).contentShape(Rectangle())
         }.buttonStyle(.plain).onHover { hovered = $0 }.help(label).accessibilityLabel(label)
     }
@@ -560,9 +582,8 @@ final class CanvasWindowView: NSView {
     }
 }
 
-struct StreamSheet: View {
+struct StreamDialog: View {
     @Bindable var player: PlayerModel
-    @Environment(\.dismiss) private var dismiss
     @State private var address = ""
     @FocusState private var focused: Bool
     private var url: URL? {
@@ -574,17 +595,21 @@ struct StreamSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Image(systemName: "link").font(.system(size: 24, weight: .light))
             Text("Open stream").font(.system(size: 25, weight: .semibold)).tracking(-0.8)
             Text("Enter a direct media URL.").font(.system(size: 12)).foregroundStyle(.secondary)
             TextField("https://example.com/video.mp4", text: $address).textFieldStyle(.roundedBorder).focused($focused)
             HStack {
                 Text("Verc does not save stream URLs.").font(.system(size: 10)).foregroundStyle(Theme.muted)
                 Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Open") { if let url { player.add([url]); dismiss() } }.keyboardShortcut(.defaultAction).disabled(url == nil)
+                Button("Cancel") { player.showURL = false }.buttonStyle(.glass).keyboardShortcut(.cancelAction)
+                Button("Open") { if let url { player.add([url]); player.showURL = false } }.buttonStyle(.glassProminent).keyboardShortcut(.defaultAction).disabled(url == nil)
             }
-        }.padding(30).frame(width: 440).onAppear { focused = true }
+        }
+        .padding(30).frame(width: 440)
+        .glassEffect(.clear.tint(.black.opacity(0.25)), in: RoundedRectangle(cornerRadius: 20))
+        .task { await Task.yield(); focused = true }
+        .onExitCommand { player.showURL = false }
+        .accessibilityAddTraits(.isModal)
     }
 }
 

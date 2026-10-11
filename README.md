@@ -38,7 +38,8 @@ The playback controls also include volume, Picture in Picture, and full screen.
 | Play or pause | Space |
 | Seek 10 seconds | ← / → |
 | Change volume (playlist closed) | ↑ / ↓ |
-| Previous or next media (playlist open) | ↑ / ↓ |
+| Highlight playlist item (playlist open) | ↑ / ↓ |
+| Play highlighted playlist item | Enter |
 | Mute | M |
 | Media information | ⌘I |
 | Full screen | ⌃⌘F |

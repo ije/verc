@@ -94,16 +94,6 @@ struct PlayerCommands: Commands {
             Divider()
             Button("Back 10 Seconds") { player.seek(to: player.time - 10) }.keyboardShortcut(.leftArrow, modifiers: []).disabled(!player.seekable)
             Button("Forward 10 Seconds") { player.seek(to: player.time + 10) }.keyboardShortcut(.rightArrow, modifiers: []).disabled(!player.seekable)
-            if showPlaylist {
-                Button("Previous Media") {
-                    guard let index = player.playlist.firstIndex(where: { $0.id == player.current?.id }), index > 0 else { return }
-                    player.play(player.playlist[index - 1])
-                }.keyboardShortcut(.upArrow, modifiers: [])
-                Button("Next Media") {
-                    guard let index = player.playlist.firstIndex(where: { $0.id == player.current?.id }), index + 1 < player.playlist.count else { return }
-                    player.play(player.playlist[index + 1])
-                }.keyboardShortcut(.downArrow, modifiers: [])
-            }
             Divider()
             Toggle("Mute", isOn: $player.muted).keyboardShortcut("m", modifiers: [])
             Button("Volume Up") { player.volume = min(1, player.volume + 0.05) }

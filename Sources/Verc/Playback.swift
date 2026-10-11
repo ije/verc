@@ -12,9 +12,17 @@ struct MediaItem: Identifiable {
     var isAudio: Bool { Self.audioExtensions.contains(url.pathExtension.lowercased()) || UTType(filenameExtension: url.pathExtension)?.conforms(to: .audio) == true }
     var isImage: Bool { UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true }
     var detail: String { url.isFileURL ? url.pathExtension.uppercased() : "STREAM" }
-    static let audioExtensions: Set<String> = ["mp3", "flac", "wav", "m4a", "aac", "ogg", "oga", "opus", "aiff", "aif", "wma", "alac", "mka", "ape", "ac3", "dts", "amr", "au", "caf"]
-    static let videoExtensions: Set<String> = ["mp4", "mkv", "mov", "webm", "avi", "m4v", "mpg", "mpeg", "ts", "m2ts", "mts", "wmv", "flv", "vob", "ogv", "3gp", "3g2", "asf", "mxf", "rm", "rmvb", "divx", "dv", "m2v"]
-    static let subtitleExtensions: Set<String> = ["srt", "vtt", "ass", "ssa", "sub", "idx", "ttml"]
+    private static let fileExtensions: [String: Set<String>] = {
+        let types = Bundle.main.object(forInfoDictionaryKey: "CFBundleDocumentTypes") as? [[String: Any]] ?? []
+        return types.reduce(into: [:]) { result, type in
+            guard let name = type["CFBundleTypeName"] as? String,
+                  let extensions = type["CFBundleTypeExtensions"] as? [String] else { return }
+            result[name] = Set(extensions)
+        }
+    }()
+    static let audioExtensions = fileExtensions["Audio"] ?? []
+    static let videoExtensions = fileExtensions["Video"] ?? []
+    static let subtitleExtensions = fileExtensions["Subtitles"] ?? []
     static let streamSchemes: Set<String> = ["http", "https", "rtsp", "rtp", "udp", "srt"]
 }
 
@@ -345,9 +353,10 @@ final class VLC: @unchecked Sendable {
                         .filter { file in
                             guard (try? file.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { return false }
                             let ext = file.pathExtension.lowercased()
+                            guard !MediaItem.subtitleExtensions.contains(ext) else { return false }
+                            if MediaItem.audioExtensions.contains(ext) || MediaItem.videoExtensions.contains(ext) { return true }
                             let type = UTType(filenameExtension: ext)
-                            return MediaItem.audioExtensions.contains(ext) || MediaItem.videoExtensions.contains(ext)
-                                || type?.conforms(to: .audio) == true || type?.conforms(to: .movie) == true
+                            return type?.conforms(to: .audio) == true || type?.conforms(to: .movie) == true
                         }
                         .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
                     if files.isEmpty { error = "No audio or video files were found in \(url.lastPathComponent)." }

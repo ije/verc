@@ -23,14 +23,394 @@
             <key>CFBundleTypeName</key><string>Media</string>
             <key>CFBundleTypeRole</key><string>Viewer</string>
             <key>LSHandlerRank</key><string>Alternate</string>
-            <key>LSItemContentTypes</key><array><string>public.movie</string><string>public.audio</string><string>public.audiovisual-content</string></array>
-            <key>CFBundleTypeExtensions</key><array><string>mp4</string><string>mkv</string><string>mov</string><string>webm</string><string>avi</string><string>m4v</string><string>mpg</string><string>mpeg</string><string>ts</string><string>m2ts</string><string>wmv</string><string>flv</string><string>mp3</string><string>flac</string><string>wav</string><string>m4a</string><string>aac</string><string>ogg</string><string>opus</string><string>aiff</string><string>wma</string><string>m3u</string><string>m3u8</string></array>
+            <key>LSItemContentTypes</key><array><string>com.adobe.flash.video</string><string>com.apple.m4a-audio</string><string>com.apple.m4v-video</string><string>com.apple.quicktime-movie</string><string>com.microsoft.advanced-stream-redirector</string><string>com.microsoft.advanced-systems-format</string><string>com.microsoft.waveform-audio</string><string>com.microsoft.windows-media-wm</string><string>com.microsoft.windows-media-wma</string><string>com.microsoft.windows-media-wmv</string><string>com.mythtv.nuv</string><string>com.rarlab.rar-archive</string><string>com.real.realaudio</string><string>com.real.realmedia</string><string>com.real.realmedia-vbr</string><string>org.3gpp.adaptive-multi-rate-audio</string><string>org.matroska.mka</string><string>org.videolan.dav</string><string>org.videolan.vlc</string><string>org.xiph.flac</string><string>org.xiph.ogg-video</string><string>org.xiph.opus</string><string>public.3gpp</string><string>public.aac-audio</string><string>public.ac3-audio</string><string>public.aifc-audio</string><string>public.aiff-audio</string><string>public.audio</string><string>public.audiovisual-content</string><string>public.avi</string><string>public.dv-movie</string><string>public.folder</string><string>public.iso-image</string><string>public.m3u-playlist</string><string>public.midi-audio</string><string>public.movie</string><string>public.mp2</string><string>public.mp3</string><string>public.mpeg</string><string>public.mpeg-2-video</string><string>public.mpeg-4</string><string>public.mpeg-4-audio</string><string>public.pls-playlist</string><string>public.volume</string></array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key><string>Audio</string>
+            <key>CFBundleTypeRole</key><string>Viewer</string>
+            <key>LSHandlerRank</key><string>Alternate</string>
+            <key>CFBundleTypeExtensions</key><array><string>aac</string><string>ac3</string><string>adts</string><string>aif</string><string>aifc</string><string>aiff</string><string>alac</string><string>amr</string><string>aob</string><string>ape</string><string>au</string><string>axa</string><string>bwf</string><string>caf</string><string>dts</string><string>f4a</string><string>f4b</string><string>flac</string><string>it</string><string>kar</string><string>m2a</string><string>m4a</string><string>mid</string><string>midi</string><string>mka</string><string>mlp</string><string>mod</string><string>mp1</string><string>mp2</string><string>mp3</string><string>mpa</string><string>mpc</string><string>mpga</string><string>oga</string><string>ogg</string><string>oma</string><string>opus</string><string>ra</string><string>rax</string><string>rmi</string><string>s3m</string><string>smf</string><string>spx</string><string>strk</string><string>tta</string><string>voc</string><string>vqf</string><string>wav</string><string>wave</string><string>wma</string><string>wv</string><string>xa</string><string>xm</string></array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key><string>Video</string>
+            <key>CFBundleTypeRole</key><string>Viewer</string>
+            <key>LSHandlerRank</key><string>Alternate</string>
+            <key>CFBundleTypeExtensions</key><array><string>3g2</string><string>3gp</string><string>3gpp</string><string>anx</string><string>asf</string><string>avi</string><string>axv</string><string>bik</string><string>crf</string><string>dat</string><string>dav</string><string>dif</string><string>divx</string><string>dv</string><string>evo</string><string>f4p</string><string>f4v</string><string>flv</string><string>gxf</string><string>m15</string><string>m1v</string><string>m2p</string><string>m2t</string><string>m2ts</string><string>m2v</string><string>m4v</string><string>m75</string><string>mkv</string><string>mov</string><string>mp4</string><string>mpe</string><string>mpeg</string><string>mpg</string><string>mpg4</string><string>mt2s</string><string>mts</string><string>mxf</string><string>nsv</string><string>nuv</string><string>ogm</string><string>ogv</string><string>ogx</string><string>ps</string><string>qt</string><string>rec</string><string>rm</string><string>rmd</string><string>rmj</string><string>rms</string><string>rmvb</string><string>rmx</string><string>rp</string><string>rpm</string><string>rv</string><string>rvx</string><string>sdv</string><string>tod</string><string>tp</string><string>ts</string><string>vfw</string><string>vob</string><string>vro</string><string>webm</string><string>wm</string><string>wmv</string><string>wtv</string><string>xesc</string></array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key><string>Playlists</string>
+            <key>CFBundleTypeRole</key><string>Viewer</string>
+            <key>LSHandlerRank</key><string>Alternate</string>
+            <key>CFBundleTypeExtensions</key><array><string>asx</string><string>b4s</string><string>gvp</string><string>m3u</string><string>m3u8</string><string>pls</string><string>ram</string><string>sdp</string><string>vlc</string><string>xspf</string></array>
         </dict>
         <dict>
             <key>CFBundleTypeName</key><string>Subtitles</string>
             <key>CFBundleTypeRole</key><string>Viewer</string>
             <key>LSHandlerRank</key><string>Alternate</string>
-            <key>CFBundleTypeExtensions</key><array><string>srt</string><string>vtt</string><string>ass</string><string>ssa</string><string>sub</string><string>idx</string><string>ttml</string></array>
+            <key>CFBundleTypeExtensions</key><array><string>aqt</string><string>ass</string><string>cdg</string><string>idx</string><string>jss</string><string>mks</string><string>mpsub</string><string>pjs</string><string>psb</string><string>rt</string><string>smi</string><string>srt</string><string>ssa</string><string>sub</string><string>ttml</string><string>usf</string><string>utf</string><string>vtt</string></array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key><string>Disc Images</string>
+            <key>CFBundleTypeRole</key><string>Viewer</string>
+            <key>LSHandlerRank</key><string>Alternate</string>
+            <key>CFBundleTypeExtensions</key><array><string>cue</string><string>img</string><string>iso</string></array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key><string>DVD Media</string>
+            <key>CFBundleTypeRole</key><string>Viewer</string>
+            <key>LSHandlerRank</key><string>Alternate</string>
+            <key>LSTypeIsPackage</key><true/>
+            <key>CFBundleTypeExtensions</key><array><string>dvdmedia</string></array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key><string>Archives</string>
+            <key>CFBundleTypeRole</key><string>Viewer</string>
+            <key>LSHandlerRank</key><string>Alternate</string>
+            <key>CFBundleTypeExtensions</key><array><string>rar</string></array>
+        </dict>
+    </array>
+    <key>UTImportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.xa</string>
+            <key>UTTypeDescription</key><string>The Sims Audio File</string>
+            <key>UTTypeConformsTo</key><array><string>public.audio</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>xa</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.xesc</string>
+            <key>UTTypeDescription</key><string>Expression Encoder Screen Capture File</string>
+            <key>UTTypeConformsTo</key><array><string>public.video</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>xesc</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.ape</string>
+            <key>UTTypeDescription</key><string>Monkey's Audio Lossless Audio</string>
+            <key>UTTypeConformsTo</key><array><string>public.audio</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>ape</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.wv</string>
+            <key>UTTypeDescription</key><string>WavePack Audio File</string>
+            <key>UTTypeConformsTo</key><array><string>public.audio</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>wv</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.tta</string>
+            <key>UTTypeDescription</key><string>True Audio Free Lossless Audio</string>
+            <key>UTTypeConformsTo</key><array><string>public.audio</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>tta</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>com.real.ram</string>
+            <key>UTTypeDescription</key><string>RealMedia Metafile</string>
+            <key>UTTypeConformsTo</key><array><string>public.text</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.mime-type</key><array><string>audio/x-pn-realaudio</string></array>
+                <key>public.filename-extension</key><array><string>ram</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.mpc</string>
+            <key>UTTypeDescription</key><string>Musepack Audio File</string>
+            <key>UTTypeConformsTo</key><array><string>public.audio</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>mpc</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.mod</string>
+            <key>UTTypeDescription</key><string>MOD Audio File</string>
+            <key>UTTypeConformsTo</key><array><string>public.audio</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>com.apple.ostype</key><array><string>STrk</string></array>
+                <key>public.mime-type</key><array><string>audio/mod</string><string>audio/x-mod</string><string>audio/module-mod</string></array>
+                <key>public.filename-extension</key><array><string>mod</string><string>strk</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.it</string>
+            <key>UTTypeDescription</key><string>Impulse Tracker Module File</string>
+            <key>UTTypeConformsTo</key><array><string>public.audio</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>it</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.xm</string>
+            <key>UTTypeDescription</key><string>XM audio file</string>
+            <key>UTTypeConformsTo</key><array><string>public.audio</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>xm</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.amr</string>
+            <key>UTTypeDescription</key><string>Adaptive Multi-Rate Codec File</string>
+            <key>UTTypeConformsTo</key><array><string>public.audio</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>amr</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.aob</string>
+            <key>UTTypeDescription</key><string>DVD-Audio Audio Object File</string>
+            <key>UTTypeConformsTo</key><array><string>public.audio</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>aob</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.dts</string>
+            <key>UTTypeDescription</key><string>DTS Encoded Audio File</string>
+            <key>UTTypeConformsTo</key><array><string>public.audio</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>dts</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.spx</string>
+            <key>UTTypeDescription</key><string>Speex Audio File</string>
+            <key>UTTypeConformsTo</key><array><string>public.audio</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>spx</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.vob</string>
+            <key>UTTypeDescription</key><string>VOB File (DVD Video)</string>
+            <key>UTTypeConformsTo</key><array><string>public.video</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>vob</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.xiph.opus</string>
+            <key>UTTypeDescription</key><string>OPUS file</string>
+            <key>UTTypeConformsTo</key><array><string>public.audio</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>opus</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.xiph.ogg-video</string>
+            <key>UTTypeDescription</key><string>Ogg Video File</string>
+            <key>UTTypeConformsTo</key><array><string>public.video</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>ogm</string><string>ogv</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.ogg-audio</string>
+            <key>UTTypeDescription</key><string>Ogg Audio File</string>
+            <key>UTTypeConformsTo</key><array><string>public.audio</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>ogg</string><string>oga</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.oma</string>
+            <key>UTTypeDescription</key><string>Sony OpenMG Music File</string>
+            <key>UTTypeConformsTo</key><array><string>public.audio</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>oma</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.voc</string>
+            <key>UTTypeDescription</key><string>Creative Labs Audio File</string>
+            <key>UTTypeConformsTo</key><array><string>public.audio</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>voc</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.vqf</string>
+            <key>UTTypeDescription</key><string>TwinVQ Audio File</string>
+            <key>UTTypeConformsTo</key><array><string>public.audio</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>vqf</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.axa</string>
+            <key>UTTypeDescription</key><string>Annodex Audio File</string>
+            <key>UTTypeConformsTo</key><array><string>public.audio</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>axa</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.axv</string>
+            <key>UTTypeDescription</key><string>Annodex Video File</string>
+            <key>UTTypeConformsTo</key><array><string>public.movie</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>axv</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.gxf</string>
+            <key>UTTypeDescription</key><string>General eXchange Format File</string>
+            <key>UTTypeConformsTo</key><array><string>public.movie</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>gxf</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.mxf</string>
+            <key>UTTypeDescription</key><string>Material Exchange Format</string>
+            <key>UTTypeConformsTo</key><array><string>public.movie</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>mxf</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.divx</string>
+            <key>UTTypeDescription</key><string>DivX file</string>
+            <key>UTTypeConformsTo</key><array><string>public.movie</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>divx</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.wtv</string>
+            <key>UTTypeDescription</key><string>Windows Recorded TV Show</string>
+            <key>UTTypeConformsTo</key><array><string>public.movie</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>wtv</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.mpeg-stream</string>
+            <key>UTTypeDescription</key><string>MPEG-2 Stream</string>
+            <key>UTTypeConformsTo</key><array><string>public.movie</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>m2p</string><string>ps</string><string>tp</string><string>ts</string><string>m2t</string><string>m2ts</string><string>mts</string><string>mt2s</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.mlp</string>
+            <key>UTTypeDescription</key><string>Meridian Lossless Packing Audio File</string>
+            <key>UTTypeConformsTo</key><array><string>public.audio</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>mlp</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.matroska.mka</string>
+            <key>UTTypeDescription</key><string>Matroska Audio File</string>
+            <key>UTTypeConformsTo</key><array><string>public.audio</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>mka</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.matroska.mkv</string>
+            <key>UTTypeDescription</key><string>Matroska Video File</string>
+            <key>UTTypeConformsTo</key><array><string>public.movie</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>mkv</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.webm</string>
+            <key>UTTypeDescription</key><string>WebM Video File</string>
+            <key>UTTypeConformsTo</key><array><string>public.movie</string><string>org.matroska.mkv</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>webm</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.rec</string>
+            <key>UTTypeDescription</key><string>Topfield PVR Recording</string>
+            <key>UTTypeConformsTo</key><array><string>public.movie</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>rec</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.rmi</string>
+            <key>UTTypeDescription</key><string>RMID MIDI File</string>
+            <key>UTTypeConformsTo</key><array><string>public.audio</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>rmi</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.s3m</string>
+            <key>UTTypeDescription</key><string>ScreamTracker 3 Module</string>
+            <key>UTTypeConformsTo</key><array><string>public.audio</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>s3m</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.vro</string>
+            <key>UTTypeDescription</key><string>DVD Video Recording Format</string>
+            <key>UTTypeConformsTo</key><array><string>public.movie</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>vro</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.tod</string>
+            <key>UTTypeDescription</key><string>JVC Everio Video Capture File</string>
+            <key>UTTypeConformsTo</key><array><string>public.movie</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>tod</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.nsv</string>
+            <key>UTTypeDescription</key><string>Nullsoft Streaming Video</string>
+            <key>UTTypeConformsTo</key><array><string>public.video</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>nsv</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>com.mythtv.nuv</string>
+            <key>UTTypeDescription</key><string>NuppleVideo File</string>
+            <key>UTTypeConformsTo</key><array><string>public.video</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>nuv</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.dav</string>
+            <key>UTTypeDescription</key><string>DAV Video File</string>
+            <key>UTTypeConformsTo</key><array><string>public.video</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>dav</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>com.rarlab.rar-archive</string>
+            <key>UTTypeDescription</key><string>RAR Archive</string>
+            <key>UTTypeConformsTo</key><array><string>public.data</string><string>public.archive</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.mime-type</key><array><string>application/x-rar</string><string>application/x-rar-compressed</string></array>
+                <key>public.filename-extension</key><array><string>rar</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>org.videolan.vlc</string>
+            <key>UTTypeDescription</key><string>VLC playlist file</string>
+            <key>UTTypeConformsTo</key><array><string>public.text</string><string>public.playlist</string></array>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.mime-type</key><array><string>application/x-videolan-vlc</string><string>application/videolan-vlc</string></array>
+                <key>public.filename-extension</key><array><string>vlc</string></array>
+            </dict>
         </dict>
     </array>
 </dict>
