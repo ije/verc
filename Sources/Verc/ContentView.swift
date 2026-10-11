@@ -372,7 +372,7 @@ struct ContentView: View {
 
     private var volumePopover: some View {
         VStack(spacing: 12) {
-            Text("\(Int(player.volume * 100))%").font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
+            Text("\(Int(player.volume * 100))%").font(.system(size: 10, design: .monospaced)).foregroundStyle(.white)
             VolumeSlider(value: $player.volume).frame(width: 32, height: 132)
             IconButton(symbol: player.muted ? "speaker.slash.fill" : "speaker.wave.2.fill", label: "Mute", active: player.muted) { player.muted.toggle() }
         }.padding(.vertical, 18).padding(.horizontal, 12)

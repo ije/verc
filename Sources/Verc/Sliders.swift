@@ -68,6 +68,7 @@ struct VolumeSlider: NSViewRepresentable {
         slider.isVertical = true
         slider.isContinuous = true
         slider.controlSize = .small
+        slider.appearance = NSAppearance(named: .darkAqua)
         slider.trackFillColor = .white
         slider.setAccessibilityLabel("Volume")
         return slider
