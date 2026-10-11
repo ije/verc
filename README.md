@@ -2,6 +2,8 @@
 
 A media player for Apple silicon and macOS 26+, built with SwiftUI and VLC.
 
+With a subtitle track selected, use Font Size and Y Position to adjust the text. Slider handles appear on hover and stay visible while dragging.
+
 ## Build
 
 Requires Xcode 26+ on an Apple silicon Mac.

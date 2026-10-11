@@ -1,6 +1,21 @@
 import AppKit
 import SwiftUI
 
+struct SubtitleSlider: View {
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    @State private var hovered = false
+    @State private var editing = false
+
+    var body: some View {
+        Slider(value: Binding(get: { value }, set: { value = $0.rounded() }), in: range, onEditingChanged: { editing = $0 })
+            .controlSize(.small)
+            .sliderThumbVisibility(hovered || editing ? .visible : .hidden)
+            .contentShape(Rectangle())
+            .onHover { hovered = $0 }
+    }
+}
+
 struct SeekSlider: NSViewRepresentable {
     @Binding var value: Double
     let duration: Double

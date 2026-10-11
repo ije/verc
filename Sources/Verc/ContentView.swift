@@ -413,9 +413,8 @@ struct ContentView: View {
                 GlassIconButton(symbol: "plus", label: "Add subtitles", help: "Add subtitles…") { popup = nil; player.openFiles(subtitles: true) }
             }
             if !subtitles.isEmpty {
-                HStack(spacing: 10) {
-                    Text("Track")
-                    Spacer(minLength: 0)
+                HStack(spacing: 8) {
+                    Text("Track").frame(width: 64, alignment: .leading)
                     Picker("Track", selection: Binding(get: { player.subtitleID }, set: {
                         player.subtitleID = $0
                         player.send(.track($0, true))
@@ -423,22 +422,20 @@ struct ContentView: View {
                         Text("Off").tag(Int32(-1))
                         ForEach(subtitles) { Text($0.name).tag($0.id) }
                     }
-                    .labelsHidden()
+                    .labelsHidden().frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if player.subtitleID != -1 {
                     HStack(spacing: 8) {
-                        Text("Font Size").frame(width: 92, alignment: .leading)
-                        Slider(value: $player.subtitleFontSize, in: 16...100, step: 1)
-                            .controlSize(.small)
+                        Text("Font Size").frame(width: 64, alignment: .leading)
+                        SubtitleSlider(value: $player.subtitleFontSize, range: 16...100)
                             .accessibilityLabel("Subtitle Font Size")
                             .accessibilityValue("\(Int(player.subtitleFontSize)) points")
                         Text("\(Int(player.subtitleFontSize)) pt")
                             .monospacedDigit().foregroundStyle(.secondary).frame(width: 40, alignment: .trailing)
                     }
                     HStack(spacing: 8) {
-                        Text("Y Position").frame(width: 92, alignment: .leading)
-                        Slider(value: $player.subtitleBottomInset, in: 0...420, step: 1)
-                            .controlSize(.small)
+                        Text("Y Position").frame(width: 64, alignment: .leading)
+                        SubtitleSlider(value: $player.subtitleBottomInset, range: 0...420)
                             .accessibilityLabel("Subtitle Y Position")
                             .accessibilityValue("\(Int(player.subtitleBottomInset)) points from the bottom")
                         Text("\(Int(player.subtitleBottomInset)) pt")
