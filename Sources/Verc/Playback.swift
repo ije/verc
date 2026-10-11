@@ -1,5 +1,5 @@
 import AppKit
-import CVLC
+import VLC
 import Foundation
 import Observation
 import UniformTypeIdentifiers

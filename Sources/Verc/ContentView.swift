@@ -426,7 +426,7 @@ struct ContentView: View {
                 }
                 if player.subtitleID != -1 {
                     HStack(spacing: 8) {
-                        Text("Font Size").frame(width: 64, alignment: .leading)
+                        Text("Font size").frame(width: 64, alignment: .leading)
                         SubtitleSlider(value: $player.subtitleFontSize, range: 16...100)
                             .accessibilityLabel("Subtitle Font Size")
                             .accessibilityValue("\(Int(player.subtitleFontSize)) points")
@@ -434,7 +434,7 @@ struct ContentView: View {
                             .monospacedDigit().foregroundStyle(.secondary).frame(width: 40, alignment: .trailing)
                     }
                     HStack(spacing: 8) {
-                        Text("Y Position").frame(width: 64, alignment: .leading)
+                        Text("Y position").frame(width: 64, alignment: .leading)
                         SubtitleSlider(value: $player.subtitleBottomInset, range: 0...420)
                             .accessibilityLabel("Subtitle Y Position")
                             .accessibilityValue("\(Int(player.subtitleBottomInset)) points from the bottom")
