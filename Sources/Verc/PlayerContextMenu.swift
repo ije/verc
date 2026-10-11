@@ -47,11 +47,6 @@ final class PlayerMenuView: NSView {
                 .separator(),
                 PlayerMenuItem("Media Information") { player.showInfo = true }
             ]
-        } else {
-            let appearance = UserDefaults.standard.string(forKey: "appearance") ?? "System"
-            items.append(PlayerMenuItem("Appearance", children: ["System", "Light", "Dark"].map { value in
-                PlayerMenuItem(value, checked: appearance == value) { UserDefaults.standard.set(value, forKey: "appearance") }
-            }))
         }
         let menu = NSMenu()
         menu.autoenablesItems = false

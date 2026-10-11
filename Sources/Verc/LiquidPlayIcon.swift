@@ -7,7 +7,7 @@ struct LiquidPlayIcon: View {
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion || scenePhase != .active)) { context in
-            let time = reduceMotion ? 0 : Float(context.date.timeIntervalSince(started)) * 0.45
+            let time = reduceMotion ? 0 : Float(context.date.timeIntervalSince(started)) * 0.9
             let mesh = MeshGradient(width: 4, height: 4, points: [
                 [0, 0], [0.33, 0], [0.67, 0], [1, 0],
                 [0, 0.33], [0.33 + 0.12 * sin(time), 0.33 + 0.12 * cos(time * 0.8)],

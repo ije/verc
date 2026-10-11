@@ -28,5 +28,10 @@ The animated drop icon adapts Material Line Icons by Vjacheslav Trushkin
 to native SwiftUI. Its MIT license is in LineMD-LICENSE.txt.
 Source: https://github.com/cyberalien/line-md
 
+The start page adapts vgpu's prism scene to Metal, including its beveled mesh,
+spectral light mesh, optical equations, studio reflections, bloom, and dust.
+Copyright (c) 2025 Vercel, Inc. Its MIT license is in Vgpu-LICENSE.txt.
+Source: https://github.com/vercel-labs/vgpu/tree/9c23f6c02db06cff4a4c4d38656c0e6f1bda203f/apps/docs/app/%5Blang%5D/%28home%29/components/prism-background
+
 VLC provides the playback reference. Vercel provides the visual reference.
 Verc has no affiliation with VideoLAN or Vercel.

@@ -3,14 +3,13 @@ import SwiftUI
 
 enum Theme {
     static let muted = Color.primary.opacity(0.48)
-    static let surface = Color(nsColor: .windowBackgroundColor)
 }
 
 struct ContentView: View {
     @Bindable var player: PlayerModel
     @Binding var showPlaylist: Bool
     @Environment(\.scenePhase) private var scenePhase
-    @AppStorage("appearance") private var appearance = "System"
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var dropTargeted = false
     @State private var controlsVisible = true
     @State private var chromeHovered = false
@@ -21,6 +20,7 @@ struct ContentView: View {
     @FocusState private var playlistFocused: Bool
     @State private var isFullScreen = false
 
+    private var playlistVisible: Bool { showPlaylist && player.playlist.count > 1 }
     private var hasAudioChoice: Bool { player.audioTracks.lazy.filter { $0.id != -1 }.prefix(2).count > 1 }
     private var headerTitle: String {
         guard let current = player.current else { return "" }
@@ -30,16 +30,19 @@ struct ContentView: View {
     private var canvas: some View {
         playerCanvas
         .overlay(alignment: .trailing) {
-            if showPlaylist && player.playlist.count > 1 {
-                playlistSidebar
-                    .padding(12)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
-            }
+            playlistSidebar
+                .padding(8)
+                .modifier(PlaylistMotion(distance: playlistVisible ? 0 : 296, slides: true))
+                .disabled(!playlistVisible)
+                .allowsHitTesting(playlistVisible)
+                .accessibilityHidden(!playlistVisible)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: playlistVisible)
         .background(WindowChrome(title: headerTitle, controlsVisible: controlsVisible).frame(width: 0, height: 0))
         .ignoresSafeArea()
-        .preferredColorScheme(player.current != nil ? .dark : appearance == "Light" ? .light : appearance == "Dark" ? .dark : nil)
+        .preferredColorScheme(.dark)
         .tint(.primary)
     }
 
@@ -60,12 +63,12 @@ struct ContentView: View {
                 Spacer(minLength: 0)
                 if player.current != nil { transport }
             }
-            .padding(.trailing, showPlaylist && player.playlist.count > 1 ? 304 : 0)
+            .modifier(PlaylistMotion(distance: playlistVisible ? 296 : 0))
             .opacity(controlsVisible ? 1 : 0)
             .allowsHitTesting(controlsVisible)
             if player.current?.isImage == false && !player.isPictureInPicture && !player.isPlaying && !player.isLoading && player.state != 7 {
                 Button {
-                    if showPlaylist { withAnimation(.easeInOut(duration: 0.2)) { showPlaylist = false } }
+                    if showPlaylist { showPlaylist = false }
                     else { player.togglePlay() }
                 } label: {
                     Image(systemName: player.state == 6 ? "arrow.counterclockwise" : "play.fill")
@@ -76,12 +79,13 @@ struct ContentView: View {
                         .shadow(color: .black.opacity(0.3), radius: 12, y: 2)
                 }
                 .buttonStyle(.plain).accessibilityLabel(player.state == 6 ? "Replay" : "Play")
-                .padding(.trailing, showPlaylist && player.playlist.count > 1 ? 304 : 0)
+                .modifier(PlaylistMotion(distance: playlistVisible ? 296 : 0))
+                .allowsHitTesting(popup == nil)
             }
         }
         .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
-        .background(player.current == nil ? Theme.surface : .black)
+        .background(.black)
         .onGeometryChange(for: CGSize.self) { $0.size } action: { player.viewport = $0 }
         .overlay { PlayerContextMenu(player: player) }
     }
@@ -172,9 +176,20 @@ struct ContentView: View {
             if player.playlist.count > 1 && !showPlaylist {
                 IconButton(symbol: "list.triangle", label: "Show playlist") {
                     popup = nil
-                    withAnimation(.easeInOut(duration: 0.2)) { showPlaylist = true }
+                    showPlaylist = true
                 }
                 .padding(.trailing, 12)
+            } else if player.current == nil {
+                GlassIconButton(symbol: "info", label: "About the prism", size: 18) {
+                    popup = popup == .credits ? nil : .credits
+                }
+                .popover(isPresented: Binding(get: { popup == .credits }, set: {
+                    if $0 { popup = .credits }
+                    else if popup == .credits { popup = nil }
+                }), arrowEdge: .bottom) {
+                    creditsPopover.preferredColorScheme(.dark).fixedSize()
+                }
+                .padding(.trailing, 7)
             }
         }
         .onChange(of: player.playlist.count) { if player.playlist.count < 2 { showPlaylist = false } }
@@ -197,7 +212,7 @@ struct ContentView: View {
                             let selected = player.current?.id == item.id
                             Button {
                                 if !selected { player.play(item) }
-                                withAnimation(.easeInOut(duration: 0.2)) { showPlaylist = false }
+                                showPlaylist = false
                             } label: {
                                 HStack(spacing: 12) {
                                     Image(systemName: selected ? "play.fill" : item.isImage ? "photo" : item.isAudio ? "music.note" : "film")
@@ -222,16 +237,16 @@ struct ContentView: View {
                     }
                     .padding(.horizontal, 8).padding(.bottom, 8)
                 }
-                .onAppear { if let id = player.current?.id { proxy.scrollTo(id) } }
+                .onChange(of: playlistVisible) { if playlistVisible, let id = player.current?.id { proxy.scrollTo(id) } }
                 .onChange(of: player.current?.id) { if let id = player.current?.id { proxy.scrollTo(id) } }
             }
         }
         .frame(width: 280)
         .frame(maxHeight: .infinity)
         .glassEffect(.regular.tint(.black.opacity(0.25)), in: .rect(corners: .concentric(minimum: .fixed(8)), isUniform: true))
-        .focusable().focused($playlistFocused).focusEffectDisabled()
-        .onAppear { playlistFocused = true }
-        .onExitCommand { withAnimation(.easeInOut(duration: 0.2)) { showPlaylist = false } }
+        .focusable(playlistVisible).focused($playlistFocused).focusEffectDisabled()
+        .onChange(of: playlistVisible) { playlistFocused = playlistVisible }
+        .onExitCommand { showPlaylist = false }
     }
 
     private var stage: some View {
@@ -267,25 +282,32 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped().contentShape(Rectangle())
         .onTapGesture(count: 2) {
-            if showPlaylist { withAnimation(.easeInOut(duration: 0.2)) { showPlaylist = false } }
+            if showPlaylist { showPlaylist = false }
             else if player.current == nil { player.openFiles() }
             else { NSApp.keyWindow?.toggleFullScreen(nil) }
         }
         .onTapGesture {
-            if showPlaylist { withAnimation(.easeInOut(duration: 0.2)) { showPlaylist = false } }
+            if showPlaylist { showPlaylist = false }
             else if player.current != nil { player.togglePlay(); revealControls() }
         }
         .gesture(WindowDragGesture())
+        .allowsHitTesting(popup == nil)
     }
 
     private var emptyState: some View {
-        VStack(spacing: 0) {
-            LiquidPlayIcon().padding(.bottom, 16)
-            Text("Drop media here or double-click to open.").font(.system(size: 14)).foregroundStyle(.gray)
-            if let message = player.engineError {
-                Label(message, systemImage: "exclamationmark.circle").font(.system(size: 11)).foregroundStyle(.orange).padding(.top, 20)
+        PrismBackground()
+        .ignoresSafeArea()
+        .overlay(alignment: .bottom) {
+            VStack(spacing: 20) {
+                Text("Drop media here or double-click to open.").font(.system(size: 15)).foregroundStyle(.secondary)
+                if let message = player.engineError {
+                    Label(message, systemImage: "exclamationmark.circle").font(.system(size: 11)).foregroundStyle(.orange)
+                }
             }
-        }.padding(40).frame(maxWidth: .infinity, maxHeight: .infinity)
+            .shadow(color: .black, radius: 3)
+            .padding(40)
+            .allowsHitTesting(false)
+        }
     }
 
     private var transport: some View {
@@ -332,18 +354,29 @@ struct ContentView: View {
         }.padding(.vertical, 18).padding(.horizontal, 12)
     }
 
+    private var creditsPopover: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Prism").font(.system(size: 13, weight: .semibold))
+            Text("This shader is borrowed from the vgpu.sh home page by Vercel, ported from WebGPU to Metal.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 6) {
+                Link("vgpu.sh", destination: URL(string: "https://vgpu.sh")!)
+                Text("·").foregroundStyle(.tertiary)
+                Text("MIT License").foregroundStyle(.secondary)
+            }
+        }
+        .font(.system(size: 11))
+        .padding(22).frame(width: 260, alignment: .leading)
+    }
+
     private var tracksPopover: some View {
         let subtitles = player.subtitleTracks.filter { $0.id != -1 }
         return VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 8) {
-                Text("Subtitles")
+                Text("Subtitles").font(.system(size: 11)).foregroundStyle(.secondary)
                 Spacer(minLength: 0)
-                Button { popup = nil; player.openFiles(subtitles: true) } label: {
-                    Image(systemName: "plus").font(.system(size: 12))
-                        .frame(width: 24, height: 24).contentShape(Circle())
-                }
-                .buttonStyle(.plain).glassEffect(.regular.interactive(), in: Circle())
-                .help("Add subtitles…").accessibilityLabel("Add subtitles")
+                GlassIconButton(symbol: "plus", label: "Add subtitles", help: "Add subtitles…") { popup = nil; player.openFiles(subtitles: true) }
             }
             if !subtitles.isEmpty {
                 HStack(spacing: 10) {
@@ -373,6 +406,21 @@ struct ContentView: View {
         }
         .font(.system(size: 12)).pickerStyle(.menu)
         .padding(22).frame(width: 280)
+    }
+}
+
+private nonisolated struct PlaylistMotion: AnimatableModifier {
+    var distance: CGFloat
+    var slides = false
+
+    var animatableData: CGFloat {
+        get { distance }
+        set { distance = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        if slides { content.offset(x: distance) }
+        else { content.padding(.trailing, distance) }
     }
 }
 
@@ -413,7 +461,29 @@ private struct Timeline: View {
     }
 }
 
-private enum PlayerPopup { case volume, tracks }
+private enum PlayerPopup { case volume, tracks, credits }
+
+private struct GlassIconButton: View {
+    let symbol: String
+    let label: String
+    var help: String?
+    var size: CGFloat = 24
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: size / 2, weight: size < 24 ? .semibold : .regular))
+                .foregroundStyle(.white.opacity(0.9))
+                .frame(width: size, height: size).contentShape(Circle())
+        }
+        .buttonStyle(.plain).glassEffect(.clear.interactive(), in: Circle())
+        .overlay {
+            Circle().strokeBorder(.linearGradient(colors: [.white.opacity(0.4), .white.opacity(0.04), .white.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.5)
+                .allowsHitTesting(false)
+        }
+        .help(help ?? label).accessibilityLabel(label)
+    }
+}
 
 struct IconButton: View {
     let symbol: String
@@ -522,15 +592,21 @@ struct MediaInfo: View {
     @Bindable var player: PlayerModel
     @FocusState private var focused: Bool
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        let frameRatio: String = {
+            var width = player.videoWidth
+            var height = player.videoHeight
+            guard width > 0, height > 0 else { return "—" }
+            while height != 0 { (width, height) = (height, width % height) }
+            return "\(player.videoWidth / width):\(player.videoHeight / width)"
+        }()
+        return VStack(alignment: .leading, spacing: 20) {
             Text("Media information").font(.title2.weight(.semibold))
             Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 12) {
                 GridRow { Text("Name").foregroundStyle(.secondary); Text(player.current?.title ?? "No media").lineLimit(2) }
                 GridRow { Text("Format").foregroundStyle(.secondary); Text(player.current?.detail ?? "—") }
                 GridRow { Text("Duration").foregroundStyle(.secondary); Text(timeLabel(player.duration)) }
-                GridRow { Text("Resolution").foregroundStyle(.secondary); Text(player.videoWidth > 0 ? "\(player.videoWidth) × \(player.videoHeight)" : "—") }
-                GridRow { Text("Engine").foregroundStyle(.secondary); Text("libVLC \(player.engineVersion ?? "unavailable")") }
-                GridRow { Text("License").foregroundStyle(.secondary); Text("GNU GPL v2.0") }
+                GridRow { Text("Resolution").foregroundStyle(.secondary); Text(verbatim: player.videoWidth > 0 ? "\(player.videoWidth) × \(player.videoHeight)" : "—") }
+                GridRow { Text("Frame ratio").foregroundStyle(.secondary); Text(frameRatio) }
             }.font(.system(size: 12)).textSelection(.enabled)
             HStack { Spacer(); Button("Done") { player.showInfo = false }.buttonStyle(.glass).keyboardShortcut(.defaultAction) }
         }

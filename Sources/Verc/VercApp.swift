@@ -14,6 +14,34 @@ struct VercApp: App {
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1080, height: 608)
         .commands { PlayerCommands(player: delegate.player, showPlaylist: showPlaylist) }
+
+        Window("About Verc", id: "about") {
+            VStack(spacing: 16) {
+                LiquidPlayIcon()
+                VStack(spacing: 4) {
+                    Text("Verc").font(.title2.weight(.semibold))
+                    if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+                       let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String {
+                        Text("Version \(version) (\(build))").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                VStack(spacing: 6) {
+                    Text("Engine: libVLC \(delegate.player.engineVersion ?? "unavailable")")
+                    Text("License: GNU GPL v2.0")
+                }.font(.system(size: 12))
+                if let copyright = Bundle.main.object(forInfoDictionaryKey: "NSHumanReadableCopyright") as? String {
+                    Text(copyright).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .multilineTextAlignment(.center).textSelection(.enabled)
+            .frame(width: 300).padding(28)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
+        .commandsRemoved()
     }
 }
 
@@ -47,9 +75,13 @@ struct VercApp: App {
 
 struct PlayerCommands: Commands {
     @Bindable var player: PlayerModel
+    @Environment(\.openWindow) private var openWindow
     let showPlaylist: Bool
 
     var body: some Commands {
+        CommandGroup(replacing: .appInfo) {
+            Button("About Verc") { openWindow(id: "about") }
+        }
         CommandGroup(replacing: .newItem) {
             Button("Open Media…") { player.openFiles() }.keyboardShortcut("o")
             Button("Open URL…") { player.showURL = true }.keyboardShortcut("o", modifiers: [.command, .shift])

@@ -7,7 +7,7 @@ let package = Package(
     products: [.executable(name: "Verc", targets: ["Verc"])],
     targets: [
         .target(name: "CVLC", exclude: ["Subtitle.c"], linkerSettings: [.linkedLibrary("dl")]),
-        .executableTarget(name: "Verc", dependencies: ["CVLC"])
+        .executableTarget(name: "Verc", dependencies: ["CVLC"], resources: [.copy("Prism.metal")])
     ],
     swiftLanguageModes: [.v6]
 )
