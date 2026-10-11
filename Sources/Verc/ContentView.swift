@@ -176,7 +176,6 @@ struct ContentView: View {
         .overlay(alignment: .trailing) {
             if player.playlist.count > 1 && !showPlaylist {
                 IconButton(symbol: "list.triangle", label: "Show playlist") {
-                    popup = nil
                     showPlaylist = true
                 }
                 .padding(.trailing, 12)
@@ -194,7 +193,10 @@ struct ContentView: View {
             }
         }
         .onChange(of: player.playlist.count) { if player.playlist.count < 2 { showPlaylist = false } }
-        .onChange(of: showPlaylist) { revealControls() }
+        .onChange(of: showPlaylist) {
+            if showPlaylist { popup = nil }
+            revealControls()
+        }
         .onHover { chromeHovered = $0; revealControls() }
     }
 
@@ -422,6 +424,26 @@ struct ContentView: View {
                         ForEach(subtitles) { Text($0.name).tag($0.id) }
                     }
                     .labelsHidden()
+                }
+                if player.subtitleID != -1 {
+                    HStack(spacing: 8) {
+                        Text("Font Size").frame(width: 92, alignment: .leading)
+                        Slider(value: $player.subtitleFontSize, in: 16...100, step: 1)
+                            .controlSize(.small)
+                            .accessibilityLabel("Subtitle Font Size")
+                            .accessibilityValue("\(Int(player.subtitleFontSize)) points")
+                        Text("\(Int(player.subtitleFontSize)) pt")
+                            .monospacedDigit().foregroundStyle(.secondary).frame(width: 40, alignment: .trailing)
+                    }
+                    HStack(spacing: 8) {
+                        Text("Y Position").frame(width: 92, alignment: .leading)
+                        Slider(value: $player.subtitleBottomInset, in: 0...420, step: 1)
+                            .controlSize(.small)
+                            .accessibilityLabel("Subtitle Y Position")
+                            .accessibilityValue("\(Int(player.subtitleBottomInset)) points from the bottom")
+                        Text("\(Int(player.subtitleBottomInset)) pt")
+                            .monospacedDigit().foregroundStyle(.secondary).frame(width: 40, alignment: .trailing)
+                    }
                 }
             }
             if hasAudioChoice {

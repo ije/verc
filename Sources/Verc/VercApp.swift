@@ -13,7 +13,7 @@ struct VercApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1080, height: 608)
-        .commands { PlayerCommands(player: delegate.player, showPlaylist: showPlaylist) }
+        .commands { PlayerCommands(player: delegate.player, showPlaylist: $showPlaylist) }
 
         Window("About Verc", id: "about") {
             VStack(spacing: 16) {
@@ -76,7 +76,7 @@ struct VercApp: App {
 struct PlayerCommands: Commands {
     @Bindable var player: PlayerModel
     @Environment(\.openWindow) private var openWindow
-    let showPlaylist: Bool
+    @Binding var showPlaylist: Bool
 
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
@@ -104,6 +104,7 @@ struct PlayerCommands: Commands {
             Toggle("Repeat", isOn: $player.repeatMedia)
         }
         CommandGroup(after: .toolbar) {
+            Button("Show Playlist") { showPlaylist = true }.keyboardShortcut("l").disabled(player.playlist.count < 2)
             Toggle("Fill Window", isOn: $player.fillVideo)
             Button(player.isPictureInPicture ? "Exit Picture in Picture" : "Picture in Picture") { player.togglePictureInPicture() }
                 .keyboardShortcut("p", modifiers: [.command, .shift]).disabled(!player.canPictureInPicture)

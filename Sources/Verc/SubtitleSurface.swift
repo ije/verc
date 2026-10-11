@@ -32,8 +32,9 @@ final class SubtitleSurface: NSView {
             rect = CGRect(x: rect.midX - width / 2, y: rect.midY - height / 2, width: width, height: height)
         }
         let scale = player.isPictureInPicture ? size.width / 1080 : 1
-        let fontSize = 32 * scale
-        let inset = controlsVisible && !player.isPictureInPicture ? max(20, 80 - (size.height - rect.maxY)) : 40 * scale
+        let fontSize = player.subtitleFontSize * scale
+        let bottomInset = player.subtitleBottomInset * scale
+        let inset = bottomInset + (controlsVisible && !player.isPictureInPicture ? max(0, 40 - (size.height - rect.maxY)) : 0)
         if lastSize != rect.size || lastInset != inset || lastFontSize != fontSize {
             lastSize = rect.size
             lastInset = inset
