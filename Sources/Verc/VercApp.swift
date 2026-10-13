@@ -83,7 +83,7 @@ struct PlayerCommands: Commands {
             Button("About Verc") { openWindow(id: "about") }
         }
         CommandGroup(replacing: .newItem) {
-            Button("Open Media…") { player.openFiles() }.keyboardShortcut("o")
+            Button("Open File…") { player.openFiles() }.keyboardShortcut("o")
             Button("Open URL…") { player.showURL = true }.keyboardShortcut("o", modifiers: [.command, .shift])
             Button("Add Subtitles…") { player.openFiles(subtitles: true) }
                 .keyboardShortcut("s", modifiers: [.command, .shift]).disabled(player.current == nil)
@@ -92,8 +92,8 @@ struct PlayerCommands: Commands {
             Button(player.isPlaying ? "Pause" : "Play") { player.togglePlay() }.keyboardShortcut(.space, modifiers: [])
             Button("Stop") { player.stop() }.keyboardShortcut(".").disabled(player.current == nil)
             Divider()
-            Button("Back 10 Seconds") { player.seek(to: player.time - 10, showFeedback: true) }.keyboardShortcut(.leftArrow, modifiers: []).disabled(!player.seekable)
-            Button("Forward 10 Seconds") { player.seek(to: player.time + 10, showFeedback: true) }.keyboardShortcut(.rightArrow, modifiers: []).disabled(!player.seekable)
+            Button("Back 10 Seconds") { player.seek(by: -10) }.keyboardShortcut(.leftArrow, modifiers: []).disabled(!player.seekable)
+            Button("Forward 10 Seconds") { player.seek(by: 10) }.keyboardShortcut(.rightArrow, modifiers: []).disabled(!player.seekable)
             Divider()
             Toggle("Mute", isOn: $player.muted).keyboardShortcut("m", modifiers: [])
             Button("Volume Up") { player.volume = min(1, player.volume + 0.05) }
@@ -101,7 +101,9 @@ struct PlayerCommands: Commands {
             Button("Volume Down") { player.volume = max(0, player.volume - 0.05) }
                 .keyboardShortcut(showPlaylist ? nil : KeyboardShortcut(.downArrow, modifiers: []))
             Divider()
-            Toggle("Repeat", isOn: $player.repeatMedia)
+            Picker("Repeat", selection: $player.repeatMode) {
+                ForEach(RepeatMode.allCases, id: \.self) { mode in Text(mode.rawValue).tag(mode) }
+            }
         }
         CommandGroup(after: .toolbar) {
             Button("Show Playlist") { showPlaylist = true }.keyboardShortcut("l").disabled(player.playlist.count < 2)

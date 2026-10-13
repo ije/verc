@@ -8,6 +8,7 @@ struct MediaItem: Identifiable {
     let id = UUID()
     let url: URL
     var duration: Double?
+    var subtitles: [URL] = []
     var title: String { url.isFileURL ? url.deletingPathExtension().lastPathComponent : ["", "/"].contains(url.lastPathComponent) ? url.host ?? "Stream" : url.lastPathComponent }
     var isAudio: Bool { Self.audioExtensions.contains(url.pathExtension.lowercased()) || UTType(filenameExtension: url.pathExtension)?.conforms(to: .audio) == true }
     var isImage: Bool { UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true }
@@ -30,6 +31,10 @@ struct MediaItem: Identifiable {
 struct MediaTrack: Identifiable, Equatable, Sendable {
     let id: Int32
     let name: String
+}
+
+enum RepeatMode: String, CaseIterable {
+    case off = "Off", all = "All", one = "One"
 }
 
 struct PlaybackSnapshot: Sendable {
@@ -229,7 +234,7 @@ final class VLC: @unchecked Sendable {
     var time = 0.0
     var duration = 0.0
     var seekable = false
-    private(set) var seekForward: Bool?
+    private(set) var seekSeconds: Double?
     var videoWidth: UInt32 = 0
     var videoHeight: UInt32 = 0
     var videoRatio = CGSize.zero
@@ -258,7 +263,7 @@ final class VLC: @unchecked Sendable {
     var speed: Float = 1 {
         didSet { send(.rate(speed)) }
     }
-    var repeatMedia = false
+    var repeatMode = RepeatMode.off
     var fillVideo = true { didSet { updateCrop() } }
     var viewport = CGSize.zero { didSet { updateCrop() } }
     var showURL = false
@@ -272,13 +277,14 @@ final class VLC: @unchecked Sendable {
     @ObservationIgnored let videoView = NSView()
     @ObservationIgnored private(set) var engine: VLC?
     @ObservationIgnored private var sleepActivity: NSObjectProtocol?
-    @ObservationIgnored private var externalSubtitles: [URL] = []
     @ObservationIgnored private var didStart = false
     @ObservationIgnored private var playbackID = UUID()
     @ObservationIgnored private var pictureInPicture: PictureInPicture?
     @ObservationIgnored private var durationTask: Task<Void, Never>?
     @ObservationIgnored private var addTask: Task<Void, Never>?
     @ObservationIgnored private var seekFeedbackTask: Task<Void, Never>?
+    @ObservationIgnored private var seekOrigin = 0.0
+    @ObservationIgnored private var seekTarget = 0.0
     var canPictureInPicture: Bool { isPictureInPicture || (current != nil && videoWidth > 0 && videoHeight > 0) }
     var isPlaying: Bool { state == 3 }
     var isLoading: Bool { current != nil && (state == 0 || state == 1 || state == 2) }
@@ -334,7 +340,7 @@ final class VLC: @unchecked Sendable {
             send(.volume(muted ? 0 : volume))
             send(.rate(speed))
             updateCrop()
-            for url in externalSubtitles { send(.subtitle(url)) }
+            for url in current?.subtitles ?? [] { send(.subtitle(url)) }
         }
         if isPlaying && sleepActivity == nil {
             sleepActivity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleDisplaySleepDisabled], reason: "Playing media")
@@ -343,9 +349,10 @@ final class VLC: @unchecked Sendable {
             sleepActivity = nil
         }
         if state == 6 && previous != 6 {
-            if repeatMedia { togglePlay() }
-            else if let index = playlist.firstIndex(where: { $0.id == current?.id }), index + 1 < playlist.count {
-                play(playlist[index + 1])
+            if repeatMode == .one { togglePlay() }
+            else if let index = playlist.firstIndex(where: { $0.id == current?.id }) {
+                if index + 1 < playlist.count { play(playlist[index + 1]) }
+                else if repeatMode == .all, let first = playlist.first { play(first) }
             }
         } else if state == 7 && previous != 7 {
             error = "Verc could not play this media. The file may be damaged, or the stream may be unavailable."
@@ -380,7 +387,7 @@ final class VLC: @unchecked Sendable {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = !subtitles
-        panel.title = subtitles ? "Add subtitles" : "Open media"
+        panel.title = subtitles ? "Add subtitles" : "Open file"
         if subtitles { panel.allowedContentTypes = MediaItem.subtitleExtensions.compactMap { UTType(filenameExtension: $0) } }
         panel.begin { [weak self] response in
             guard response == .OK else { return }
@@ -399,12 +406,12 @@ final class VLC: @unchecked Sendable {
             guard let self, !Task.isCancelled else { return }
             if let failure = resolved.failure { error = failure }
             let items = resolved.media.map { MediaItem(url: $0) }
-            guard let first = items.first else { attach(subtitles); return }
+            guard !items.isEmpty else { attach(subtitles); return }
             for item in items where item.url.isFileURL { NSDocumentController.shared.noteNewRecentDocumentURL(item.url) }
             durationTask?.cancel()
             playlist = items
-            play(first)
-            externalSubtitles = subtitles
+            playlist[0].subtitles = subtitles
+            play(playlist[0])
             durationTask = Task { [weak self, engine] in
                 guard items.count > 1, let engine else { return }
                 for (index, item) in items.enumerated() where item.url.isFileURL && !item.isImage {
@@ -461,19 +468,18 @@ final class VLC: @unchecked Sendable {
             if !subtitles.isEmpty { error = "Open a video or audio file before adding subtitles." }
             return
         }
-        for url in subtitles where !externalSubtitles.contains(url) {
-            externalSubtitles.append(url)
+        let index = playlist.firstIndex(where: { $0.id == current?.id })
+        for url in subtitles where current?.subtitles.contains(url) == false {
+            current?.subtitles.append(url)
+            if let index { playlist[index].subtitles.append(url) }
             if didStart { send(.subtitle(url)) }
         }
     }
 
     func play(_ item: MediaItem) {
         seekFeedbackTask?.cancel()
-        seekForward = nil
-        if current?.id != item.id {
-            if item.isAudio { endPictureInPicture() }
-            externalSubtitles = []
-        }
+        seekSeconds = nil
+        if current?.id != item.id && item.isAudio { endPictureInPicture() }
         current = item
         playbackID = UUID()
         state = 1
@@ -501,17 +507,28 @@ final class VLC: @unchecked Sendable {
         else { send(.pause(isPlaying)) }
     }
 
-    func seek(to seconds: Double, showFeedback: Bool = false) {
+    func seek(to seconds: Double) {
         guard seekable, seconds.isFinite else { return }
-        if showFeedback {
-            seekFeedbackTask?.cancel()
-            seekForward = seconds >= time
-            seekFeedbackTask = Task {
-                do { try await Task.sleep(for: .seconds(3)) } catch { return }
-                seekForward = nil
-            }
+        seekFeedbackTask?.cancel()
+        seekSeconds = nil
+        time = max(0, min(seconds, duration > 0 ? duration : seconds))
+        send(.seek(time))
+    }
+
+    func seek(by offset: Double) {
+        guard seekable else { return }
+        // Snapshots can report the old position until VLC finishes a seek, so count from the pending target.
+        let base = seekSeconds == nil ? time : seekTarget
+        if seekSeconds?.sign != offset.sign { seekOrigin = base }
+        seekTarget = max(0, min(base + offset, duration > 0 ? duration : base + offset))
+        // Keep the offset's sign even when the move is zero, so the feedback shows the pressed direction at the ends.
+        seekSeconds = Double(signOf: offset, magnitudeOf: seekTarget - seekOrigin)
+        seekFeedbackTask?.cancel()
+        seekFeedbackTask = Task {
+            try? await Task.sleep(for: .seconds(2))
+            if !Task.isCancelled { seekSeconds = nil }
         }
-        time = min(max(0, seconds), duration > 0 ? duration : seconds)
+        time = seekTarget
         send(.seek(time))
     }
 
@@ -522,7 +539,7 @@ final class VLC: @unchecked Sendable {
 
     func stop() {
         seekFeedbackTask?.cancel()
-        seekForward = nil
+        seekSeconds = nil
         addTask?.cancel()
         addTask = nil
         durationTask?.cancel()
@@ -531,7 +548,6 @@ final class VLC: @unchecked Sendable {
         send(.stop)
         current = nil
         playlist = []
-        externalSubtitles = []
         state = 0
         time = 0
         duration = 0

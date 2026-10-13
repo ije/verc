@@ -206,10 +206,27 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Label("Playlist", systemImage: "list.triangle").font(.system(size: 13, weight: .semibold))
-                Spacer()
                 Text(player.playlist.count.formatted()).font(.system(size: 11)).foregroundStyle(.secondary)
+                    .padding(.horizontal, 6).frame(minWidth: 20, minHeight: 20)
+                    .background(.primary.opacity(0.08), in: Capsule())
+                    .overlay { Capsule().strokeBorder(.primary.opacity(0.15), lineWidth: 0.5) }
+                Spacer()
+                Button {
+                    player.repeatMode = switch player.repeatMode {
+                    case .off: .all
+                    case .all: .one
+                    case .one: .off
+                    }
+                } label: {
+                    Image(systemName: player.repeatMode == .all ? "repeat" : player.repeatMode == .one ? "repeat.1" : "repeat.badge.xmark")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(player.repeatMode == .off ? Color.secondary : .white)
+                        .frame(width: 28, height: 28).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).help("Repeat: \(player.repeatMode.rawValue)")
+                .accessibilityLabel("Repeat").accessibilityValue(player.repeatMode.rawValue)
             }
-            .padding(16)
+            .padding(.horizontal, 16).padding(.vertical, 10)
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 4) {
@@ -476,19 +493,32 @@ struct SeekFeedback: View {
 
     var body: some View {
         ZStack {
-            if let forward = player.seekForward {
-                Image(systemName: forward ? "forward.fill" : "backward.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 42, height: 42)
-                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal, 12)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: forward ? .trailing : .leading)
-                    .id(forward)
-                    .transition(.opacity)
+            if let seconds = player.seekSeconds {
+                let forward = seconds.sign == .plus, amount = abs(seconds)
+                HStack(spacing: 8) {
+                    Image(systemName: forward ? "forward.fill" : "backward.fill")
+                        .keyframeAnimator(initialValue: 0.0, trigger: reduceMotion ? 0 : seconds) { content, offset in
+                            content.offset(x: offset)
+                        } keyframes: { _ in
+                            CubicKeyframe(forward ? 4 : -4, duration: 0.12)
+                            CubicKeyframe(0, duration: 0.18)
+                        }
+                    Text(amount < 60 ? "\(Int(amount))s" : timeLabel(amount))
+                        .monospacedDigit()
+                        .contentTransition(.numericText(value: amount))
+                }
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .frame(height: 42)
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: forward ? .trailing : .leading)
+                .id(forward)
+                .transition(.opacity.combined(with: .offset(x: forward ? -12 : 12)))
             }
         }
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: player.seekForward)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: player.seekSeconds)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }

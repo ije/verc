@@ -22,7 +22,7 @@ final class PlayerMenuView: NSView {
     override func rightMouseDown(with event: NSEvent) {
         guard let player else { return }
         var items: [NSMenuItem] = [
-            PlayerMenuItem("Open Media…") { player.openFiles() },
+            PlayerMenuItem("Open File…") { player.openFiles() },
             PlayerMenuItem("Open URL…") { player.showURL = true }
         ]
         if player.current != nil {
@@ -38,7 +38,9 @@ final class PlayerMenuView: NSView {
                 PlayerMenuItem("Playback speed", children: [Float(0.5), 0.75, 1, 1.25, 1.5, 2].map { speed in
                     PlayerMenuItem("\(speed.formatted())×", checked: player.speed == speed) { player.speed = speed }
                 }),
-                PlayerMenuItem("Repeat", checked: player.repeatMedia) { player.repeatMedia.toggle() },
+                PlayerMenuItem("Repeat", children: RepeatMode.allCases.map { mode in
+                    PlayerMenuItem(mode.rawValue, checked: player.repeatMode == mode) { player.repeatMode = mode }
+                }),
                 .separator(),
                 PlayerMenuItem(player.isPictureInPicture ? "Exit Picture in Picture" : "Picture in Picture", enabled: player.canPictureInPicture) {
                     player.togglePictureInPicture()
