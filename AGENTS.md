@@ -31,6 +31,7 @@ Verc is a media player for Apple silicon and macOS 26+. It uses Swift 6, SwiftUI
 - Reuse `PlayerModel.videoView` between the main window and Picture in Picture.
 - Keep the C bridge compatible with the bundled VLC runtime. Do not unload VLC libraries after successful initialization.
 - Keep `Vendor/VLC/include/` consistent with the VLC version in the build script.
+- Load app resources from `Bundle.main`, and copy them into `Contents/Resources` in the build script. Do not use SwiftPM resources or `Bundle.module`.
 - Keep Swift GPU buffer layouts identical to their Metal structs.
 - Reuse GPU resources. Preserve animation suspension for hidden or inactive windows and support for Reduce Motion.
 - Preserve third-party notices. Refer to `NOTICE` for distribution requirements.
@@ -38,14 +39,14 @@ Verc is a media player for Apple silicon and macOS 26+. It uses Swift 6, SwiftUI
 
 ## Build and checks
 
-Use Xcode 26+ on an Apple silicon Mac. Run commands from the repository root.
+Use Xcode 26+ and the Metal Toolchain on an Apple silicon Mac. Install the toolchain with `xcodebuild -downloadComponent MetalToolchain`. Run commands from the repository root.
 
 ```sh
 ./scripts/build.sh --debug
 open dist/Verc.app
 ```
 
-The first build downloads VLC 3.0.24 and verifies its checksum. The script compiles the subtitle plugin separately from SwiftPM.
+The first build downloads VLC 3.0.24 and verifies its checksum. The script compiles the subtitle plugin and `Prism.metal` separately from SwiftPM.
 The app needs the bundled VLC runtime and resources. A plain `swift build` does not assemble the app bundle.
 
 For release or bundle changes, run `./scripts/build.sh`.

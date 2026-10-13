@@ -129,7 +129,7 @@ private final class PrismMetalView: MTKView {
 
 // Shared buffers and textures must stay immutable after initialization.
 private final class PrismResources: @unchecked Sendable {
-    static let shared = Task.detached(priority: .userInitiated) { try PrismResources(bundle: .module) }
+    static let shared = Task.detached(priority: .userInitiated) { try PrismResources(bundle: .main) }
 
     enum Blend { case replace, additive, premultiplied }
 
@@ -140,10 +140,9 @@ private final class PrismResources: @unchecked Sendable {
     let environment: any MTLTexture
 
     init(bundle: Bundle) throws {
-        guard let device = MTLCreateSystemDefaultDevice(), let queue = device.makeCommandQueue(),
-              let source = bundle.url(forResource: "Prism", withExtension: "metal") else { throw CocoaError(.featureUnsupported) }
+        guard let device = MTLCreateSystemDefaultDevice(), let queue = device.makeCommandQueue() else { throw CocoaError(.featureUnsupported) }
         self.queue = queue
-        let library = try device.makeLibrary(source: String(contentsOf: source, encoding: .utf8), options: nil)
+        let library = try device.makeDefaultLibrary(bundle: bundle)
         func pipeline(_ vertex: String, _ fragment: String, _ format: MTLPixelFormat, samples: Int = 1,
                       blend: Blend = .replace) throws -> any MTLRenderPipelineState {
             let descriptor = MTLRenderPipelineDescriptor()

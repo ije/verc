@@ -255,13 +255,10 @@ Exit traceExit(float3 position, Ray direction, Ray inwardNormal, uint plane, con
     return { position, direction, direction, inwardNormal, false, plane };
 }
 
-fragment float4 glassBack(GlassVertex in [[stage_in]], constant Scene &s [[buffer(1)]],
-                          texture2d<float> environment [[texture(0)]]) {
-    float3 incident = -normalize(s.camera.xyz - in.worldPosition);
-    float3 inward = -normalize(in.normal);
-
-    Exit exit = traceExit(in.worldPosition, { incident, dfdx(incident), dfdy(incident) },
-                          { inward, dfdx(inward), dfdy(inward) }, NO_PLANE, s);
+float4 backSurface(float3 position, float3 normal, Ray incident, Ray inward, texture2d<float> environment, constant Scene &s) {
+    incident.value = -normalize(s.camera.xyz - position);
+    inward.value = -normalize(normal);
+    Exit exit = traceExit(position, incident, inward, NO_PLANE, s);
     Ray reflected = reflectRay(exit.incident, exit.inwardNormal);
     uint plane = exit.plane;
     float4 hit = nextSurface(exit.position, reflected.value, exit.plane, s, plane);
@@ -276,6 +273,27 @@ fragment float4 glassBack(GlassVertex in [[stage_in]], constant Scene &s [[buffe
     float facing = saturate(-dot(exit.incident.value, exit.inwardNormal.value));
     float weight = exit.escaped ? exitFresnel(s.glass.y, facing, s.glass.x) : 1.0;
     return float4(environmentColor * weight, weight);
+}
+
+// The back bevel turns about 90 degrees within a few pixels, and total internal reflection switches on and
+// off inside it. Four samples per pixel still leave those sub-pixel lines dotted, so shade 8 points per sample there.
+fragment float4 glassBack(GlassVertex in [[stage_in]], constant Scene &s [[buffer(1)]],
+                          texture2d<float> environment [[texture(0)]]) {
+    float3 incident = -normalize(s.camera.xyz - in.worldPosition);
+    float3 inward = -normalize(in.normal);
+    Ray incidentRay = { incident, dfdx(incident), dfdy(incident) }, inwardRay = { inward, dfdx(inward), dfdy(inward) };
+    float3 positionDx = dfdx(in.worldPosition), positionDy = dfdy(in.worldPosition);
+    float3 normalDx = dfdx(in.normal), normalDy = dfdy(in.normal);
+    if (length(inwardRay.dx) + length(inwardRay.dy) < 0.05) return backSurface(in.worldPosition, in.normal, incidentRay, inwardRay, environment, s);
+    const float2 offsets[8] = { float2(0.03125, -0.09375), float2(-0.03125, 0.09375), float2(0.15625, 0.03125), float2(-0.09375, -0.15625),
+                                float2(-0.15625, 0.15625), float2(-0.21875, -0.03125), float2(0.09375, 0.21875), float2(0.21875, -0.21875) };
+    float4 sum = 0;
+    for (uint index = 0; index < 8; ++index) {
+        float2 offset = offsets[index];
+        sum += backSurface(in.worldPosition + positionDx * offset.x + positionDy * offset.y,
+                           in.normal + normalDx * offset.x + normalDy * offset.y, incidentRay, inwardRay, environment, s);
+    }
+    return sum * 0.125;
 }
 
 fragment float4 glassFront(GlassVertex in [[stage_in]], constant Scene &s [[buffer(1)]],

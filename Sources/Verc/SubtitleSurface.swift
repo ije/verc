@@ -24,9 +24,9 @@ final class SubtitleSurface: NSView {
         if window != nil, window === player.videoView.window, !player.videoView.bounds.isEmpty {
             rect = convert(player.videoView.bounds, from: player.videoView)
         }
-        if player.videoWidth > 0, player.videoHeight > 0 {
+        if player.videoRatio.width > 0, player.videoRatio.height > 0 {
             let aspect = player.fillVideo && !player.isPictureInPicture && player.viewport.height > 0
-                ? player.viewport.width / player.viewport.height : CGFloat(player.videoWidth) / CGFloat(player.videoHeight)
+                ? player.viewport.width / player.viewport.height : player.videoRatio.width / player.videoRatio.height
             let width = min(rect.width, rect.height * aspect)
             let height = width / aspect
             rect = CGRect(x: rect.midX - width / 2, y: rect.midY - height / 2, width: width, height: height)

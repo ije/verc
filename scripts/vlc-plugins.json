@@ -1,10 +1,10 @@
 {
   "access": ["filesystem", "attachment", "access_concat", "cache_block", "cache_read", "prefetch", "inflate", "decomp"],
-  "network": ["http", "https", "tcp", "udp", "access_srt", "live555", "rtp", "sdp", "adaptive", "hds", "gnutls", "securetransport", "memory_keystore"],
-  "containers": ["asf", "avi", "mp4", "mkv", "ogg", "es", "h26x", "mpgv", "ps", "ts", "aiff", "au", "caf", "flacsys", "wav", "rawaud", "rawdv", "rawvid", "mjpeg", "real", "nsv", "nuv", "diracsys", "pva", "voc", "tta", "xa", "playlist", "skiptags", "taglib", "xml"],
-  "decoders": ["avcodec", "videotoolbox", "dav1d", "vpx", "theora", "adpcm", "aes3", "araw", "faad", "flac", "g711", "lpcm", "mpg123", "mpc", "opus", "speex", "vorbis", "rawvideo", "jpeg", "png", "uleaddvaudio"],
+  "network": ["http", "https", "udp", "access_srt", "live555", "rtp", "adaptive", "hds", "gnutls", "securetransport", "memory_keystore"],
+  "containers": ["asf", "avi", "mp4", "mkv", "ogg", "es", "h26x", "mpgv", "ps", "ts", "aiff", "au", "caf", "flacsys", "wav", "rawdv", "rawvid", "smf", "mod", "mjpeg", "real", "nsv", "nuv", "diracsys", "pva", "voc", "tta", "xa", "playlist", "directory_demux", "skiptags", "taglib", "xml"],
+  "decoders": ["avcodec", "videotoolbox", "dav1d", "vpx", "theora", "adpcm", "aes3", "araw", "faad", "flac", "g711", "lpcm", "mpg123", "mpc", "opus", "speex", "vorbis", "audiotoolboxmidi", "rawvideo", "jpeg", "png", "uleaddvaudio"],
   "packetizers": ["packetizer_a52", "packetizer_av1", "packetizer_copy", "packetizer_dirac", "packetizer_dts", "packetizer_flac", "packetizer_h264", "packetizer_hevc", "packetizer_mlp", "packetizer_mpeg4audio", "packetizer_mpeg4video", "packetizer_mpegaudio", "packetizer_mpegvideo", "packetizer_vc1"],
-  "subtitles": ["subtitle", "subsdec", "substx3g", "subsusf", "libass", "freetype", "ttml", "webvtt", "cc", "cvdsub", "dvbsub", "spudec", "svcdsub", "vobsub", "textst", "stl", "demux_stl", "aribsub", "kate", "scte18", "scte27", "telx", "zvbi", "t140"],
-  "audio": ["auhal", "audio_format", "float_mixer", "integer_mixer", "simple_channel_mixer", "trivial_channel_mixer", "dolby_surround_decoder", "samplerate", "speex_resampler", "ugly_resampler", "scaletempo", "gain", "spdif", "tospdif", "adummy"],
-  "video": ["vout_macosx", "caopengllayer", "cvpx", "glconv_cvpx", "swscale", "scale", "chain", "blend", "deinterlace", "transform", "i420_10_p010", "i420_nv12", "i420_rgb", "i420_yuy2", "i422_i420", "i422_yuy2", "yuy2_i420", "yuy2_i422", "grey_yuv", "yuvp", "rv32", "vdummy"]
+  "subtitles": ["subtitle", "subsdec", "substx3g", "subsusf", "libass", "freetype", "ttml", "webvtt", "cc", "cvdsub", "dvbsub", "spudec", "svcdsub", "vobsub", "textst", "stl", "demux_stl", "aribsub", "kate", "scte18", "scte27", "telx", "zvbi"],
+  "audio": ["auhal", "audio_format", "float_mixer", "integer_mixer", "simple_channel_mixer", "trivial_channel_mixer", "dolby_surround_decoder", "samplerate", "ugly_resampler", "scaletempo", "spdif", "tospdif"],
+  "video": ["vout_macosx", "caopengllayer", "cvpx", "glconv_cvpx", "swscale", "scale", "chain", "blend", "deinterlace", "transform", "i420_10_p010", "i420_nv12", "i420_rgb", "i420_yuy2", "i422_i420", "i422_yuy2", "yuy2_i420", "yuy2_i422", "grey_yuv", "yuvp", "rv32"]
 }

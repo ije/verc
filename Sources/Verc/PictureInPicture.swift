@@ -9,8 +9,7 @@ import SwiftUI
     init(player: PlayerModel, mainWindow: NSWindow?) {
         self.player = player
         self.mainWindow = mainWindow
-        let ratio = CGFloat(max(player.videoWidth, 1)) / CGFloat(max(player.videoHeight, 1))
-        let size = CGSize(width: min(400, 300 * ratio), height: min(300, 400 / ratio))
+        let size = Self.size(player.videoRatio)
         let screen = mainWindow?.screen ?? NSScreen.main
         let bounds = screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
         window = PictureInPicturePanel(contentRect: CGRect(x: bounds.maxX - size.width - 24, y: bounds.minY + 24, width: size.width, height: size.height),
@@ -35,6 +34,22 @@ import SwiftUI
         window.contentView = content
         window.orderFrontRegardless()
         mainWindow?.orderOut(nil)
+    }
+
+    private static func size(_ ratio: CGSize) -> CGSize {
+        let aspect = ratio.width > 0 && ratio.height > 0 ? ratio.width / ratio.height : 16 / 9
+        return CGSize(width: min(400, 300 * aspect), height: min(300, 400 / aspect))
+    }
+
+    /// Keeps the window area and corner when the next playlist item has another shape.
+    func fit(_ ratio: CGSize) {
+        let size = Self.size(ratio)
+        guard ratio.width > 0, ratio.height > 0, window.contentAspectRatio != size else { return }
+        let scale = (window.frame.width * window.frame.height / (size.width * size.height)).squareRoot()
+        window.contentAspectRatio = size
+        window.contentMinSize = CGSize(width: size.width * 0.6, height: size.height * 0.6)
+        window.setFrame(CGRect(origin: window.frame.origin, size: CGSize(width: size.width * scale, height: size.height * scale)), display: true)
+        window.snapToCorner()
     }
 
     func windowWillClose(_ notification: Notification) { player?.endPictureInPicture() }

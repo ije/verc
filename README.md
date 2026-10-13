@@ -6,7 +6,7 @@ With a subtitle track selected, use Font Size and Y Position to adjust the text.
 
 ## Build
 
-Requires Xcode 26+ on an Apple silicon Mac.
+Requires Xcode 26+ and the Metal Toolchain on an Apple silicon Mac. Install the toolchain with `xcodebuild -downloadComponent MetalToolchain`.
 The first build downloads VLC 3.0.24 and verifies its checksum. The app includes the VLC runtime.
 
 ```sh

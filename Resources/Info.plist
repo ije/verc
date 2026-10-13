@@ -23,7 +23,7 @@
             <key>CFBundleTypeName</key><string>Media</string>
             <key>CFBundleTypeRole</key><string>Viewer</string>
             <key>LSHandlerRank</key><string>Alternate</string>
-            <key>LSItemContentTypes</key><array><string>com.adobe.flash.video</string><string>com.apple.m4a-audio</string><string>com.apple.m4v-video</string><string>com.apple.quicktime-movie</string><string>com.microsoft.advanced-stream-redirector</string><string>com.microsoft.advanced-systems-format</string><string>com.microsoft.waveform-audio</string><string>com.microsoft.windows-media-wm</string><string>com.microsoft.windows-media-wma</string><string>com.microsoft.windows-media-wmv</string><string>com.mythtv.nuv</string><string>com.rarlab.rar-archive</string><string>com.real.realaudio</string><string>com.real.realmedia</string><string>com.real.realmedia-vbr</string><string>org.3gpp.adaptive-multi-rate-audio</string><string>org.matroska.mka</string><string>org.videolan.dav</string><string>org.videolan.vlc</string><string>org.xiph.flac</string><string>org.xiph.ogg-video</string><string>org.xiph.opus</string><string>public.3gpp</string><string>public.aac-audio</string><string>public.ac3-audio</string><string>public.aifc-audio</string><string>public.aiff-audio</string><string>public.audio</string><string>public.audiovisual-content</string><string>public.avi</string><string>public.dv-movie</string><string>public.folder</string><string>public.iso-image</string><string>public.m3u-playlist</string><string>public.midi-audio</string><string>public.movie</string><string>public.mp2</string><string>public.mp3</string><string>public.mpeg</string><string>public.mpeg-2-video</string><string>public.mpeg-4</string><string>public.mpeg-4-audio</string><string>public.pls-playlist</string><string>public.volume</string></array>
+            <key>LSItemContentTypes</key><array><string>com.adobe.flash.video</string><string>com.apple.m4a-audio</string><string>com.apple.m4v-video</string><string>com.apple.quicktime-movie</string><string>com.microsoft.advanced-stream-redirector</string><string>com.microsoft.advanced-systems-format</string><string>com.microsoft.waveform-audio</string><string>com.microsoft.windows-media-wm</string><string>com.microsoft.windows-media-wma</string><string>com.microsoft.windows-media-wmv</string><string>com.mythtv.nuv</string><string>com.real.realaudio</string><string>com.real.realmedia</string><string>com.real.realmedia-vbr</string><string>org.3gpp.adaptive-multi-rate-audio</string><string>org.matroska.mka</string><string>org.videolan.dav</string><string>org.videolan.vlc</string><string>org.xiph.flac</string><string>org.xiph.ogg-video</string><string>org.xiph.opus</string><string>public.3gpp</string><string>public.aac-audio</string><string>public.ac3-audio</string><string>public.aifc-audio</string><string>public.aiff-audio</string><string>public.audio</string><string>public.audiovisual-content</string><string>public.avi</string><string>public.dv-movie</string><string>public.folder</string><string>public.m3u-playlist</string><string>public.midi-audio</string><string>public.movie</string><string>public.mp2</string><string>public.mp3</string><string>public.mpeg</string><string>public.mpeg-2-video</string><string>public.mpeg-4</string><string>public.mpeg-4-audio</string><string>public.pls-playlist</string><string>public.volume</string></array>
         </dict>
         <dict>
             <key>CFBundleTypeName</key><string>Audio</string>
@@ -48,25 +48,6 @@
             <key>CFBundleTypeRole</key><string>Viewer</string>
             <key>LSHandlerRank</key><string>Alternate</string>
             <key>CFBundleTypeExtensions</key><array><string>aqt</string><string>ass</string><string>cdg</string><string>idx</string><string>jss</string><string>mks</string><string>mpsub</string><string>pjs</string><string>psb</string><string>rt</string><string>smi</string><string>srt</string><string>ssa</string><string>sub</string><string>ttml</string><string>usf</string><string>utf</string><string>vtt</string></array>
-        </dict>
-        <dict>
-            <key>CFBundleTypeName</key><string>Disc Images</string>
-            <key>CFBundleTypeRole</key><string>Viewer</string>
-            <key>LSHandlerRank</key><string>Alternate</string>
-            <key>CFBundleTypeExtensions</key><array><string>cue</string><string>img</string><string>iso</string></array>
-        </dict>
-        <dict>
-            <key>CFBundleTypeName</key><string>DVD Media</string>
-            <key>CFBundleTypeRole</key><string>Viewer</string>
-            <key>LSHandlerRank</key><string>Alternate</string>
-            <key>LSTypeIsPackage</key><true/>
-            <key>CFBundleTypeExtensions</key><array><string>dvdmedia</string></array>
-        </dict>
-        <dict>
-            <key>CFBundleTypeName</key><string>Archives</string>
-            <key>CFBundleTypeRole</key><string>Viewer</string>
-            <key>LSHandlerRank</key><string>Alternate</string>
-            <key>CFBundleTypeExtensions</key><array><string>rar</string></array>
         </dict>
     </array>
     <key>UTImportedTypeDeclarations</key>
@@ -392,15 +373,6 @@
             <key>UTTypeConformsTo</key><array><string>public.video</string></array>
             <key>UTTypeTagSpecification</key><dict>
                 <key>public.filename-extension</key><array><string>dav</string></array>
-            </dict>
-        </dict>
-        <dict>
-            <key>UTTypeIdentifier</key><string>com.rarlab.rar-archive</string>
-            <key>UTTypeDescription</key><string>RAR Archive</string>
-            <key>UTTypeConformsTo</key><array><string>public.data</string><string>public.archive</string></array>
-            <key>UTTypeTagSpecification</key><dict>
-                <key>public.mime-type</key><array><string>application/x-rar</string><string>application/x-rar-compressed</string></array>
-                <key>public.filename-extension</key><array><string>rar</string></array>
             </dict>
         </dict>
         <dict>

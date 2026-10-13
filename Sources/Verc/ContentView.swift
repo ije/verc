@@ -628,9 +628,10 @@ struct StreamDialog: View {
     @State private var address = ""
     @FocusState private var focused: Bool
     private var url: URL? {
+        // UDP, RTP, and SRT addresses such as udp://@:1234 listen on a local port and have no host.
         guard let url = URL(string: address.trimmingCharacters(in: .whitespacesAndNewlines)),
-              MediaItem.streamSchemes.contains(url.scheme?.lowercased() ?? ""),
-              let host = url.host, !host.isEmpty else { return nil }
+              let scheme = url.scheme?.lowercased(), MediaItem.streamSchemes.contains(scheme),
+              url.host?.isEmpty == false || (["udp", "rtp", "srt"].contains(scheme) && url.port != nil) else { return nil }
         return url
     }
 
@@ -658,13 +659,7 @@ struct MediaInfo: View {
     @Bindable var player: PlayerModel
     @FocusState private var focused: Bool
     var body: some View {
-        let frameRatio: String = {
-            var width = player.videoWidth
-            var height = player.videoHeight
-            guard width > 0, height > 0 else { return "—" }
-            while height != 0 { (width, height) = (height, width % height) }
-            return "\(player.videoWidth / width):\(player.videoHeight / width)"
-        }()
+        let ratio = player.videoRatio
         return VStack(alignment: .leading, spacing: 20) {
             Text("Media information").font(.title2.weight(.semibold))
             Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 12) {
@@ -672,7 +667,7 @@ struct MediaInfo: View {
                 GridRow { Text("Format").foregroundStyle(.secondary); Text(player.current?.detail ?? "—") }
                 GridRow { Text("Duration").foregroundStyle(.secondary); Text(timeLabel(player.duration)) }
                 GridRow { Text("Resolution").foregroundStyle(.secondary); Text(verbatim: player.videoWidth > 0 ? "\(player.videoWidth) × \(player.videoHeight)" : "—") }
-                GridRow { Text("Frame ratio").foregroundStyle(.secondary); Text(frameRatio) }
+                GridRow { Text("Frame ratio").foregroundStyle(.secondary); Text(verbatim: ratio.height > 0 ? "\(Int(ratio.width)):\(Int(ratio.height))" : "—") }
             }.font(.system(size: 12)).textSelection(.enabled)
             HStack { Spacer(); Button("Done") { player.showInfo = false }.buttonStyle(.glass).keyboardShortcut(.defaultAction) }
         }
