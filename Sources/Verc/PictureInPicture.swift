@@ -149,6 +149,7 @@ private struct PictureInPictureView: View {
                 .opacity(hovered || !player.isPlaying ? 1 : 0)
                 .allowsHitTesting(hovered || !player.isPlaying)
             }
+            .overlay { SeekFeedback(player: player) }
             .background(.black).preferredColorScheme(.dark)
             .contentShape(Rectangle())
             .onHover { hovered = $0 }

@@ -78,7 +78,7 @@ struct VCEngine {
     void *player;
     void *subtitleState;
     void (*subtitleRelease)(void *);
-    void (*subtitleLayout)(void *, VCSubtitleLayout);
+    void (*subtitleLayout)(void *, VCSubtitleLayout, const char *);
     atomic_bool failed, playable;
 #define DECLARE(result, name, parameters) result (*name) parameters;
     VLC_FUNCTIONS(DECLARE)
@@ -280,6 +280,6 @@ int vc_select_track(VCEngine *e, int subtitles, int id) {
 }
 int vc_add_subtitle(VCEngine *e, const char *uri) { return e->media_player_add_slave(e->player, 0, uri, 1); }
 void vc_crop(VCEngine *e, const char *geometry) { e->video_set_crop_geometry(e->player, geometry); }
-void vc_subtitle_layout(VCEngine *e, VCSubtitleLayout layout) {
-    if (e->subtitleState) e->subtitleLayout(e->subtitleState, layout);
+void vc_subtitle_layout(VCEngine *e, VCSubtitleLayout layout, const char *font) {
+    if (e->subtitleState) e->subtitleLayout(e->subtitleState, layout, font);
 }

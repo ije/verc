@@ -92,8 +92,8 @@ struct PlayerCommands: Commands {
             Button(player.isPlaying ? "Pause" : "Play") { player.togglePlay() }.keyboardShortcut(.space, modifiers: [])
             Button("Stop") { player.stop() }.keyboardShortcut(".").disabled(player.current == nil)
             Divider()
-            Button("Back 10 Seconds") { player.seek(to: player.time - 10) }.keyboardShortcut(.leftArrow, modifiers: []).disabled(!player.seekable)
-            Button("Forward 10 Seconds") { player.seek(to: player.time + 10) }.keyboardShortcut(.rightArrow, modifiers: []).disabled(!player.seekable)
+            Button("Back 10 Seconds") { player.seek(to: player.time - 10, showFeedback: true) }.keyboardShortcut(.leftArrow, modifiers: []).disabled(!player.seekable)
+            Button("Forward 10 Seconds") { player.seek(to: player.time + 10, showFeedback: true) }.keyboardShortcut(.rightArrow, modifiers: []).disabled(!player.seekable)
             Divider()
             Toggle("Mute", isOn: $player.muted).keyboardShortcut("m", modifiers: [])
             Button("Volume Up") { player.volume = min(1, player.volume + 0.05) }

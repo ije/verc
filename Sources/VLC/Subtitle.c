@@ -11,6 +11,8 @@ typedef struct {
     pthread_mutex_t lock;
     atomic_uint references;
     VCSubtitleLayout layout;
+    char *font;
+    unsigned fontRevision;
 } SubtitleState;
 
 typedef struct {
@@ -23,12 +25,15 @@ struct subpicture_updater_sys_t {
     RegionPosition *positions;
     size_t count;
     double height, fontSize;
+    unsigned fontRevision;
     bool text;
 };
 
 void *verc_subtitle_create(void *player) {
     SubtitleState *state = calloc(1, sizeof(*state));
     if (!state) return NULL;
+    state->font = strdup("Helvetica Neue");
+    if (!state->font) { free(state); return NULL; }
     pthread_mutex_init(&state->lock, NULL);
     atomic_init(&state->references, 1);
     state->layout.bottomInset = 42;
@@ -42,13 +47,22 @@ void verc_subtitle_release(void *context) {
     SubtitleState *state = context;
     if (atomic_fetch_sub(&state->references, 1) != 1) return;
     pthread_mutex_destroy(&state->lock);
+    free(state->font);
     free(state);
 }
 
-void verc_subtitle_layout(void *context, VCSubtitleLayout layout) {
+void verc_subtitle_layout(void *context, VCSubtitleLayout layout, const char *font) {
     SubtitleState *state = context;
     pthread_mutex_lock(&state->lock);
     state->layout = layout;
+    if (strcmp(state->font, font)) {
+        char *copy = strdup(font);
+        if (copy) {
+            free(state->font);
+            state->font = copy;
+            state->fontRevision++;
+        }
+    }
     pthread_mutex_unlock(&state->lock);
 }
 
@@ -119,8 +133,8 @@ static int Validate(subpicture_t *picture, bool srcChanged, const video_format_t
     }
     pthread_mutex_lock(&sys->state->lock);
     VCSubtitleLayout layout = sys->state->layout;
+    bool refresh = sys->text && (layout.height != sys->height || layout.fontSize != sys->fontSize || sys->state->fontRevision != sys->fontRevision);
     pthread_mutex_unlock(&sys->state->lock);
-    bool refresh = sys->text && (layout.height != sys->height || layout.fontSize != sys->fontSize);
     int result = VLC_SUCCESS;
     if (sys->source->updater.pf_validate) {
         sys->source->p_region = picture->p_region;
@@ -136,13 +150,15 @@ static void Capture(subpicture_t *picture) {
     subpicture_updater_sys_t *sys = picture->updater.p_sys;
     pthread_mutex_lock(&sys->state->lock);
     VCSubtitleLayout layout = sys->state->layout;
+    char *font = strdup(sys->state->font);
+    sys->fontRevision = sys->state->fontRevision;
     pthread_mutex_unlock(&sys->state->lock);
     sys->height = layout.height;
     sys->fontSize = layout.fontSize;
     size_t count = 0;
     for (subpicture_region_t *r = picture->p_region; r; r = r->p_next) count++;
     RegionPosition *positions = realloc(sys->positions, count * sizeof(*positions));
-    if (!positions && count) { sys->count = 0; return; }
+    if (!positions && count) { sys->count = 0; free(font); return; }
     sys->positions = positions;
     sys->count = count;
     size_t index = 0;
@@ -153,10 +169,17 @@ static void Capture(subpicture_t *picture) {
             if (layout.height <= 0) continue;
             if (!text->style) text->style = text_style_Create(STYLE_NO_DEFAULTS);
             if (!text->style) continue;
+            if (font) {
+                free(text->style->psz_fontname);
+                free(text->style->psz_monofontname);
+                text->style->psz_fontname = strdup(font);
+                text->style->psz_monofontname = strdup(font);
+            }
             text->style->i_font_size = lround(layout.fontSize * picture->i_original_picture_height / layout.height);
             text->style->f_font_relsize = 0;
         }
     }
+    free(font);
     Layout(picture);
 }
 

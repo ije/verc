@@ -50,7 +50,7 @@ struct PlaybackSnapshot: Sendable {
 enum PlaybackCommand: Sendable {
     case open(URL, UUID), pause(Bool), seek(Double), volume(Double), rate(Float)
     case track(Int32, Bool), subtitle(URL), crop(String?), stop
-    case subtitleLayout(width: Double, height: Double, bottomInset: Double, fontSize: Double)
+    case subtitleLayout(width: Double, height: Double, bottomInset: Double, fontSize: Double, font: String)
 }
 
 final class VLC: @unchecked Sendable {
@@ -120,8 +120,8 @@ final class VLC: @unchecked Sendable {
             case let .subtitle(url):
                 if vc_add_subtitle(handle, url.absoluteString) != 0 { onError?("This subtitle file could not be loaded.") }
                 else { externalSubtitles = true }
-            case let .subtitleLayout(width, height, bottomInset, fontSize):
-                vc_subtitle_layout(handle, VCSubtitleLayout(width: width, height: height, bottomInset: bottomInset, fontSize: fontSize))
+            case let .subtitleLayout(width, height, bottomInset, fontSize, font):
+                vc_subtitle_layout(handle, VCSubtitleLayout(width: width, height: height, bottomInset: bottomInset, fontSize: fontSize), font)
             case let .crop(geometry):
                 if let geometry { vc_crop(handle, geometry) }
                 else { vc_crop(handle, nil) }
@@ -222,12 +222,14 @@ final class VLC: @unchecked Sendable {
 }
 
 @MainActor @Observable final class PlayerModel {
+    static let subtitleFonts = NSFontManager.shared.availableFontFamilies.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     var current: MediaItem?
     private(set) var playlist: [MediaItem] = []
     var state: Int32 = 0
     var time = 0.0
     var duration = 0.0
     var seekable = false
+    private(set) var seekForward: Bool?
     var videoWidth: UInt32 = 0
     var videoHeight: UInt32 = 0
     var videoRatio = CGSize.zero
@@ -235,6 +237,12 @@ final class VLC: @unchecked Sendable {
     var subtitleTracks: [MediaTrack] = []
     var audioID: Int32 = -1
     var subtitleID: Int32 = -1
+    var subtitleFont = "Helvetica Neue" {
+        didSet {
+            UserDefaults.standard.set(subtitleFont, forKey: "subtitleFont")
+            (videoView.superview as? SubtitleSurface)?.updateSubtitleLayout()
+        }
+    }
     var subtitleFontSize = 36.0 {
         didSet { (videoView.superview as? SubtitleSurface)?.updateSubtitleLayout() }
     }
@@ -270,10 +278,12 @@ final class VLC: @unchecked Sendable {
     @ObservationIgnored private var pictureInPicture: PictureInPicture?
     @ObservationIgnored private var durationTask: Task<Void, Never>?
     @ObservationIgnored private var addTask: Task<Void, Never>?
+    @ObservationIgnored private var seekFeedbackTask: Task<Void, Never>?
     var canPictureInPicture: Bool { isPictureInPicture || (current != nil && videoWidth > 0 && videoHeight > 0) }
     var isPlaying: Bool { state == 3 }
     var isLoading: Bool { current != nil && (state == 0 || state == 1 || state == 2) }
     init() {
+        if let font = UserDefaults.standard.string(forKey: "subtitleFont"), Self.subtitleFonts.contains(font) { subtitleFont = font }
         videoView.wantsLayer = true
         videoView.layer?.backgroundColor = NSColor.black.cgColor
         let engine = VLC(view: UInt(bitPattern: Unmanaged.passUnretained(videoView).toOpaque())) { [weak self] result in
@@ -458,6 +468,8 @@ final class VLC: @unchecked Sendable {
     }
 
     func play(_ item: MediaItem) {
+        seekFeedbackTask?.cancel()
+        seekForward = nil
         if current?.id != item.id {
             if item.isAudio { endPictureInPicture() }
             externalSubtitles = []
@@ -489,8 +501,16 @@ final class VLC: @unchecked Sendable {
         else { send(.pause(isPlaying)) }
     }
 
-    func seek(to seconds: Double) {
+    func seek(to seconds: Double, showFeedback: Bool = false) {
         guard seekable, seconds.isFinite else { return }
+        if showFeedback {
+            seekFeedbackTask?.cancel()
+            seekForward = seconds >= time
+            seekFeedbackTask = Task {
+                do { try await Task.sleep(for: .seconds(3)) } catch { return }
+                seekForward = nil
+            }
+        }
         time = min(max(0, seconds), duration > 0 ? duration : seconds)
         send(.seek(time))
     }
@@ -501,6 +521,8 @@ final class VLC: @unchecked Sendable {
     }
 
     func stop() {
+        seekFeedbackTask?.cancel()
+        seekForward = nil
         addTask?.cancel()
         addTask = nil
         durationTask?.cancel()

@@ -34,4 +34,4 @@ int vc_selected_track(VCEngine *engine, int subtitles);
 int vc_select_track(VCEngine *engine, int subtitles, int id);
 int vc_add_subtitle(VCEngine *engine, const char *uri);
 void vc_crop(VCEngine *engine, const char *geometry);
-void vc_subtitle_layout(VCEngine *engine, VCSubtitleLayout layout);
+void vc_subtitle_layout(VCEngine *engine, VCSubtitleLayout layout, const char *font);

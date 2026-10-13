@@ -83,6 +83,8 @@ struct ContentView: View {
                 .modifier(PlaylistMotion(distance: playlistVisible ? 296 : 0))
                 .allowsHitTesting(popup == nil)
             }
+            SeekFeedback(player: player)
+                .modifier(PlaylistMotion(distance: playlistVisible ? 296 : 0))
         }
         .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
@@ -422,9 +424,16 @@ struct ContentView: View {
                         Text("Off").tag(Int32(-1))
                         ForEach(subtitles) { Text($0.name).tag($0.id) }
                     }
-                    .labelsHidden().frame(maxWidth: .infinity, alignment: .leading)
+                    .labelsHidden().buttonSizing(.flexible).frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if player.subtitleID != -1 {
+                    HStack(spacing: 8) {
+                        Text("Font").frame(width: 64, alignment: .leading)
+                        Picker("Subtitle Font", selection: $player.subtitleFont) {
+                            ForEach(PlayerModel.subtitleFonts, id: \.self) { Text($0).tag($0) }
+                        }
+                        .labelsHidden().buttonSizing(.flexible).frame(maxWidth: .infinity, alignment: .leading)
+                    }
                     HStack(spacing: 8) {
                         Text("Font size").frame(width: 64, alignment: .leading)
                         SubtitleSlider(value: $player.subtitleFontSize, range: 16...100)
@@ -453,10 +462,35 @@ struct ContentView: View {
                     Text("Off").tag(Int32(-1))
                     ForEach(player.audioTracks.filter { $0.id != -1 }) { Text($0.name).tag($0.id) }
                 }
+                .buttonSizing(.flexible).frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .font(.system(size: 12)).pickerStyle(.menu)
         .padding(22).frame(width: 280)
+    }
+}
+
+struct SeekFeedback: View {
+    let player: PlayerModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack {
+            if let forward = player.seekForward {
+                Image(systemName: forward ? "forward.fill" : "backward.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 42, height: 42)
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal, 12)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: forward ? .trailing : .leading)
+                    .id(forward)
+                    .transition(.opacity)
+            }
+        }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: player.seekForward)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
