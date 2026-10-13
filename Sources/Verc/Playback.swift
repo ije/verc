@@ -512,7 +512,14 @@ final class VLC: @unchecked Sendable {
         seekFeedbackTask?.cancel()
         seekSeconds = nil
         time = max(0, min(seconds, duration > 0 ? duration : seconds))
-        send(.seek(time))
+        if duration > 0 && time >= duration {
+            // VLC can ignore seeks at EOF; reject old snapshots so the time stays at the end.
+            playbackID = UUID()
+            state = 6
+            seekable = false
+            if let activity = sleepActivity { ProcessInfo.processInfo.endActivity(activity); sleepActivity = nil }
+            send(.stop)
+        } else { send(.seek(time)) }
     }
 
     func seek(by offset: Double) {
@@ -521,15 +528,13 @@ final class VLC: @unchecked Sendable {
         let base = seekSeconds == nil ? time : seekTarget
         if seekSeconds?.sign != offset.sign { seekOrigin = base }
         seekTarget = max(0, min(base + offset, duration > 0 ? duration : base + offset))
+        seek(to: seekTarget)
         // Keep the offset's sign even when the move is zero, so the feedback shows the pressed direction at the ends.
         seekSeconds = Double(signOf: offset, magnitudeOf: seekTarget - seekOrigin)
-        seekFeedbackTask?.cancel()
         seekFeedbackTask = Task {
             try? await Task.sleep(for: .seconds(2))
             if !Task.isCancelled { seekSeconds = nil }
         }
-        time = seekTarget
-        send(.seek(time))
     }
 
     private func updateCrop() {
