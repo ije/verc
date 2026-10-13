@@ -1,0 +1,132 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-26
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set release version
+        run: |
+          if [[ ! $GITHUB_REF_NAME =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo '::error::Use a release tag such as v1.2.3.'
+            exit 1
+          fi
+          plutil -replace CFBundleShortVersionString -string "${GITHUB_REF_NAME#v}" Resources/Info.plist
+          plutil -replace CFBundleVersion -string "$GITHUB_RUN_NUMBER" Resources/Info.plist
+
+      - name: Install Apple credentials
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          for name in APPLE_CERTIFICATE_BASE64 APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_TEAM_ID APPLE_APP_SPECIFIC_PASSWORD; do
+            if [[ -z ${!name} ]]; then
+              printf '::error::Missing repository secret: %s\n' "$name"
+              exit 1
+            fi
+          done
+          umask 077
+          certificate="$RUNNER_TEMP/verc-certificate.p12"
+          keychain="$RUNNER_TEMP/verc-signing.keychain-db"
+          password=$(openssl rand -hex 32)
+          echo "::add-mask::$password"
+          printf '%s' "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$certificate"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$certificate" -P "$APPLE_CERTIFICATE_PASSWORD" -k "$keychain" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain"
+          rm "$certificate"
+          identity=$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*) \([A-Fa-f0-9]*\) "Developer ID Application:.*"/\1/p')
+          if [[ ! $identity =~ ^[A-Fa-f0-9]{40}$ ]]; then
+            echo '::error::The P12 must contain exactly one valid Developer ID Application certificate and its private key.'
+            exit 1
+          fi
+          echo "SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
+          xcrun notarytool store-credentials verc --keychain "$keychain" \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD"
+
+      - name: Install Metal Toolchain
+        run: |
+          xcodebuild -version
+          xcodebuild -downloadComponent MetalToolchain
+
+      - name: Build and sign
+        run: ./scripts/build.sh
+
+      - name: Notarize and staple
+        run: |
+          archive="$RUNNER_TEMP/Verc-notarization.zip"
+          result="$RUNNER_TEMP/notarization.json"
+          credentials=(--keychain-profile verc --keychain "$RUNNER_TEMP/verc-signing.keychain-db")
+          ditto -c -k --keepParent dist/Verc.app "$archive"
+          if ! xcrun notarytool submit "$archive" "${credentials[@]}" --wait --timeout 30m --output-format json > "$result" \
+            || ! jq -e '.status == "Accepted"' "$result" > /dev/null; then
+            cat "$result"
+            submission=$(jq -r '.id // empty' "$result")
+            if [[ -n $submission ]]; then
+              xcrun notarytool log "$submission" "${credentials[@]}"
+            fi
+            exit 1
+          fi
+          cat "$result"
+          xcrun stapler staple dist/Verc.app
+          xcrun stapler validate dist/Verc.app
+          codesign --verify --deep --strict dist/Verc.app
+          spctl --assess --type execute --verbose dist/Verc.app
+
+      - name: Create release archive
+        run: |
+          cd dist
+          archive="Verc-$GITHUB_REF_NAME-arm64.zip"
+          ditto -c -k --keepParent Verc.app "$archive"
+          shasum -a 256 "$archive" > "$archive.sha256"
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          archive="dist/Verc-$GITHUB_REF_NAME-arm64.zip"
+          if gh release view "$GITHUB_REF_NAME" --json isDraft > "$RUNNER_TEMP/release.json"; then
+            if ! jq -e '.isDraft' "$RUNNER_TEMP/release.json" > /dev/null; then
+              echo '::error::This release is already public. Use a new version tag.'
+              exit 1
+            fi
+            gh release upload "$GITHUB_REF_NAME" "$archive" "$archive.sha256" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$archive" "$archive.sha256" \
+              --verify-tag --draft --title "Verc $GITHUB_REF_NAME" --generate-notes
+          fi
+
+      - name: Remove Apple credentials
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/verc-certificate.p12"
+          keychain="$RUNNER_TEMP/verc-signing.keychain-db"
+          if [[ -f $keychain ]]; then
+            security delete-keychain "$keychain"
+          fi

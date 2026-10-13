@@ -102,7 +102,14 @@ Selected playback runtime from $runtime
 $plugin_count VLC plugins plus Verc's subtitle layout plugin. No VLC desktop UI, extensions, translations, capture, casting, or dedicated encoder modules.
 Include corresponding VLC and dependency sources when you distribute this bundle. See NOTICE.
 EOF
-codesign --force --deep --sign - "$app" || fail "App signature verification failed."
+sign=(codesign --force --sign "${SIGNING_IDENTITY:--}")
+if [[ ${SIGNING_IDENTITY:--} != - ]]; then
+  sign+=(--timestamp --options runtime)
+fi
+while IFS= read -r -d '' file; do
+  "${sign[@]}" "$file" || fail "Cannot sign library: $file"
+done < <(find "$destination" -type f -name '*.dylib' -print0)
+"${sign[@]}" "$app" || fail "Cannot sign the app."
 codesign --verify --deep --strict "$app" || fail "App signature verification failed."
 bytes=$(find "$app" -type f -exec stat -f '%z' {} + | awk '{ total += $1 } END { printf "%.0f", total }')
 if [[ $config == release && $bytes -gt $((50 * 1048576)) ]]; then

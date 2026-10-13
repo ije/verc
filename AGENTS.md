@@ -36,6 +36,7 @@ Verc is a media player for Apple silicon and macOS 26+. It uses Swift 6, SwiftUI
 - Reuse GPU resources. Preserve animation suspension for hidden or inactive windows and support for Reduce Motion.
 - Preserve third-party notices. Refer to `NOTICE` for distribution requirements.
 - Do not commit generated files from `.build/` or `dist/`.
+- Do not update readme unless the user ask for.
 
 ## Build and checks
 
