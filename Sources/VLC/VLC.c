@@ -142,7 +142,7 @@ VCEngine *vc_create(const char *directory, char *error, int capacity) {
         "--no-media-library", "--no-video-on-top", "--no-mouse-events",
         "--no-keyboard-events", "--no-snapshot-preview", "--quiet",
         "--videotoolbox", "--videotoolbox-hw-decoder-only", "--avcodec-hw=any",
-        "--vout=macosx", "--aout=auhal",
+        "--vout=macosx", "--aout=auhal", "--sub-track=0",
         subtitlesAvailable ? "--sub-filter=vercsub" : "--sub-filter="
     };
     engine->instance = engine->new(sizeof(options) / sizeof(options[0]), options);
