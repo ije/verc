@@ -102,7 +102,7 @@ struct ContentView: View {
         .onChange(of: player.isPlaying) { revealControls() }
         .onChange(of: player.current?.id) { popup = nil; revealControls() }
         .onChange(of: popup) { revealControls() }
-        .onChange(of: scenePhase) { if scenePhase != .active { popup = nil } }
+        .onChange(of: scenePhase) { if scenePhase != .active && popup != .credits { popup = nil } }
         .onChange(of: player.showURL) { revealControls() }
         .onChange(of: player.showInfo) { revealControls() }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in isFullScreen = true }
@@ -185,11 +185,11 @@ struct ContentView: View {
                 GlassIconButton(symbol: "info", label: "About Verc", size: 18) {
                     popup = popup == .credits ? nil : .credits
                 }
-                .popover(isPresented: Binding(get: { popup == .credits }, set: {
-                    if $0 { popup = .credits }
-                    else if popup == .credits { popup = nil }
-                }), arrowEdge: .bottom) {
-                    creditsPopover.preferredColorScheme(.dark).fixedSize()
+                .background {
+                    CreditsPopover(isPresented: Binding(get: { popup == .credits }, set: {
+                        if $0 { popup = .credits }
+                        else if popup == .credits { popup = nil }
+                    }), content: creditsPopover.preferredColorScheme(.dark).fixedSize())
                 }
                 .padding(.trailing, 7)
             }
@@ -379,7 +379,7 @@ struct ContentView: View {
             Timeline(player: player, scrubbing: $scrubbing, editingChanged: revealControls)
             IconButton(symbol: player.isPictureInPicture ? "pip.exit" : "pip.enter", label: player.isPictureInPicture ? "Exit Picture in Picture" : "Picture in Picture", active: player.isPictureInPicture) { player.togglePictureInPicture() }
                 .disabled(!player.canPictureInPicture)
-            IconButton(symbol: isFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right", label: isFullScreen ? "Exit full screen · ⌃⌘F" : "Full screen · ⌃⌘F") { NSApp.keyWindow?.toggleFullScreen(nil) }
+            IconButton(symbol: isFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right", label: isFullScreen ? "Exit Full Screen · 🌐︎F" : "Enter Full Screen · 🌐︎F") { NSApp.keyWindow?.toggleFullScreen(nil) }
         }
         .font(.system(size: 11, weight: .medium, design: .monospaced)).monospacedDigit()
         .foregroundStyle(.white.opacity(0.9))
@@ -577,6 +577,106 @@ private struct Timeline: View {
 }
 
 private enum PlayerPopup { case volume, tracks, credits }
+
+private struct CreditsPopover<Content: View>: NSViewRepresentable {
+    @Binding var isPresented: Bool
+    let content: Content
+
+    func makeCoordinator() -> Coordinator { Coordinator(isPresented: $isPresented) }
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        let coordinator = context.coordinator
+        coordinator.isPresented = $isPresented
+        guard isPresented else { coordinator.close(); return }
+        let panel = coordinator.panel
+        guard !panel.isVisible, let window = view.window, let screen = window.screen else { return }
+        let anchor = window.convertToScreen(view.convert(view.bounds, to: nil))
+        let size = NSHostingView(rootView: content).fittingSize
+        let x = min(max(anchor.midX - size.width / 2, screen.visibleFrame.minX + 8), screen.visibleFrame.maxX - size.width - 8)
+        let outline = CreditsOutline(arrowX: min(max(anchor.midX - x, 30), size.width - 30))
+        let host = NSHostingView(rootView: content
+            .foregroundStyle(.white)
+            .padding(.top, 12)
+            .glassEffect(.regular, in: outline)
+            .preferredColorScheme(.dark))
+        panel.contentView = host
+        panel.initialFirstResponder = host
+        panel.setFrame(NSRect(x: x, y: max(screen.visibleFrame.minY + 8, anchor.minY - size.height - 16),
+            width: size.width, height: size.height + 12), display: true)
+        window.addChildWindow(panel, ordered: .above)
+        panel.makeKeyAndOrderFront(nil)
+        coordinator.monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown, .keyDown]) { [weak coordinator, weak view] event in
+            guard let coordinator else { return event }
+            if event.type == .keyDown {
+                guard event.keyCode == 53 else { return event }
+                coordinator.isPresented.wrappedValue = false
+                return nil
+            }
+            guard event.window !== coordinator.panel else { return event }
+            coordinator.isPresented.wrappedValue = false
+            if let view, event.window === view.window, view.bounds.contains(view.convert(event.locationInWindow, from: nil)) { return nil }
+            return event
+        }
+        coordinator.resizeObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: window, queue: .main) { [weak coordinator] _ in
+            MainActor.assumeIsolated { coordinator?.isPresented.wrappedValue = false }
+        }
+    }
+
+    static func dismantleNSView(_ view: NSView, coordinator: Coordinator) { coordinator.close() }
+
+    @MainActor final class Coordinator: NSObject, NSWindowDelegate {
+        var isPresented: Binding<Bool>
+        let panel = CreditsPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        var monitor: Any?
+        var resizeObserver: Any?
+
+        init(isPresented: Binding<Bool>) {
+            self.isPresented = isPresented
+            super.init()
+            panel.title = "Credits"
+            panel.isOpaque = false
+            panel.backgroundColor = .clear
+            panel.hasShadow = true
+            panel.hidesOnDeactivate = true
+            panel.level = .popUpMenu
+            panel.collectionBehavior = [.transient, .fullScreenAuxiliary]
+            panel.appearance = NSAppearance(named: .darkAqua)
+            panel.delegate = self
+        }
+
+        func windowDidResignKey(_ notification: Notification) { isPresented.wrappedValue = false }
+
+        func close() {
+            if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
+            if let resizeObserver { NotificationCenter.default.removeObserver(resizeObserver); self.resizeObserver = nil }
+            if panel.isKeyWindow { panel.parent?.makeKey() }
+            panel.parent?.removeChildWindow(panel)
+            panel.orderOut(nil)
+            panel.contentView = nil
+        }
+    }
+}
+
+private final class CreditsPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+}
+
+private struct CreditsOutline: Shape {
+    let arrowX: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let body = Path(roundedRect: CGRect(x: rect.minX, y: rect.minY + 12, width: rect.width, height: rect.height - 12), cornerRadius: 16)
+        let arrow = Path { path in
+            path.move(to: CGPoint(x: rect.minX + arrowX - 14, y: rect.minY + 16))
+            path.addLine(to: CGPoint(x: rect.minX + arrowX - 2, y: rect.minY + 2))
+            path.addQuadCurve(to: CGPoint(x: rect.minX + arrowX + 2, y: rect.minY + 2), control: CGPoint(x: rect.minX + arrowX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.minX + arrowX + 14, y: rect.minY + 16))
+            path.closeSubpath()
+        }
+        return body.union(arrow)
+    }
+}
 
 private struct CreditLink: View {
     let label: String
