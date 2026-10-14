@@ -1,6 +1,7 @@
 import AppKit
 import VLC
 import Foundation
+import ImageIO
 import Observation
 import UniformTypeIdentifiers
 
@@ -179,6 +180,33 @@ final class VLC: @unchecked Sendable {
         if state == 6 || state == 7 { timer?.schedule(deadline: .distantFuture) }
     }
 
+    func saveFrame(to url: URL, id: UUID) async throws -> CGImage? {
+        try await withCheckedThrowingContinuation { continuation in
+            queue.async { [self] in
+                guard !closed, let handle, mediaID == id, [3, 4].contains(vc_state(handle)) else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".png")
+                defer { try? FileManager.default.removeItem(at: temporary) }
+                do {
+                    // VLC can return success even when encoding or writing the snapshot fails.
+                    guard vc_snapshot(handle, temporary.path) == 0,
+                          let source = CGImageSourceCreateWithURL(temporary as CFURL, nil),
+                          let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                            kCGImageSourceCreateThumbnailFromImageAlways: true,
+                            kCGImageSourceCreateThumbnailWithTransform: true,
+                            kCGImageSourceThumbnailMaxPixelSize: 480
+                          ] as CFDictionary) else {
+                        throw NSError(domain: "Verc", code: 2, userInfo: [NSLocalizedDescriptionKey: "The current video frame could not be captured. Try again when the video is ready."])
+                    }
+                    try FileManager.default.moveItem(at: temporary, to: url)
+                    continuation.resume(returning: image)
+                } catch { continuation.resume(throwing: error) }
+            }
+        }
+    }
+
     func duration(of url: URL) async -> Double? {
         await metadata(nil) { handle in
             let milliseconds = vc_read_duration(handle, url.absoluteString)
@@ -274,18 +302,21 @@ final class VLC: @unchecked Sendable {
     var engineError: String?
     var engineVersion: String?
     var isPictureInPicture = false
+    private var isSavingFrame = false
     @ObservationIgnored let videoView = NSView()
     @ObservationIgnored private(set) var engine: VLC?
     @ObservationIgnored private var sleepActivity: NSObjectProtocol?
     @ObservationIgnored private var didStart = false
     @ObservationIgnored private var playbackID = UUID()
     @ObservationIgnored private var pictureInPicture: PictureInPicture?
+    @ObservationIgnored private var framePreview: FramePreview?
     @ObservationIgnored private var durationTask: Task<Void, Never>?
     @ObservationIgnored private var addTask: Task<Void, Never>?
     @ObservationIgnored private var seekFeedbackTask: Task<Void, Never>?
     @ObservationIgnored private var seekOrigin = 0.0
     @ObservationIgnored private var seekTarget = 0.0
     var canPictureInPicture: Bool { isPictureInPicture || (current != nil && videoWidth > 0 && videoHeight > 0) }
+    var canSaveFrame: Bool { current?.isAudio == false && videoWidth > 0 && videoHeight > 0 && (state == 3 || state == 4) && !isSavingFrame }
     var isPlaying: Bool { state == 3 }
     var isLoading: Bool { current != nil && (state == 0 || state == 1 || state == 2) }
     init() {
@@ -361,6 +392,34 @@ final class VLC: @unchecked Sendable {
 
     func send(_ command: PlaybackCommand) {
         engine?.send(command)
+    }
+
+    func saveFrame() {
+        guard canSaveFrame, let engine else { return }
+        let id = playbackID
+        let screen = videoView.window?.screen
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
+        let name = "Verc Frame \(formatter.string(from: Date())) \(UUID().uuidString.prefix(8)).png"
+        isSavingFrame = true
+        Task {
+            defer { isSavingFrame = false }
+            do {
+                let preferences = UserDefaults.standard.persistentDomain(forName: "com.apple.screencapture")
+                let location = preferences?["location-screenshot"] as? String ?? preferences?["location"] as? String
+                let directory: URL
+                if let location, !location.isEmpty {
+                    directory = URL(fileURLWithPath: (location as NSString).expandingTildeInPath, isDirectory: true)
+                } else {
+                    directory = try FileManager.default.url(for: .desktopDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+                }
+                let url = directory.appendingPathComponent(name)
+                guard let image = try await engine.saveFrame(to: url, id: id) else { return }
+                framePreview?.close()
+                framePreview = FramePreview(url: url, image: image, screen: screen)
+            } catch { self.error = "The frame could not be saved. \(error.localizedDescription)" }
+        }
     }
 
     func togglePictureInPicture() {

@@ -85,8 +85,25 @@ struct PlayerCommands: Commands {
         CommandGroup(replacing: .newItem) {
             Button("Open File…") { player.openFiles() }.keyboardShortcut("o")
             Button("Open URL…") { player.showURL = true }.keyboardShortcut("o", modifiers: [.command, .shift])
+        }
+        CommandGroup(replacing: .saveItem) {
+            Button("Save Current Frame") { player.saveFrame() }.keyboardShortcut("s").disabled(!player.canSaveFrame)
+        }
+        CommandMenu("Subtitles") {
+            let subtitles = player.subtitleTracks.filter { $0.id != -1 }
             Button("Add Subtitles…") { player.openFiles(subtitles: true) }
                 .keyboardShortcut("s", modifiers: [.command, .shift]).disabled(player.current == nil)
+            if player.current != nil && !subtitles.isEmpty {
+                Divider()
+                Picker("Track", selection: Binding(get: { player.subtitleID }, set: {
+                    player.subtitleID = $0
+                    player.send(.track($0, true))
+                })) {
+                    Text("Off").tag(Int32(-1))
+                    ForEach(subtitles) { Text($0.name).tag($0.id) }
+                }
+                .pickerStyle(.inline)
+            }
         }
         CommandMenu("Playback") {
             Button(player.isPlaying ? "Pause" : "Play") { player.togglePlay() }.keyboardShortcut(.space, modifiers: [])

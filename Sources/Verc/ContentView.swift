@@ -177,7 +177,7 @@ struct ContentView: View {
         .gesture(WindowDragGesture())
         .overlay(alignment: .trailing) {
             if player.playlist.count > 1 && !showPlaylist {
-                IconButton(symbol: "list.triangle", label: "Show playlist") {
+                IconButton(symbol: "list.triangle", label: "Show playlist", help: "Show playlist · ⌘L") {
                     showPlaylist = true
                 }
                 .padding(.trailing, 12)
@@ -615,6 +615,7 @@ private struct GlassIconButton: View {
 struct IconButton: View {
     let symbol: String
     let label: String
+    var help: String?
     var active = false
     let action: () -> Void
     @State private var hovered = false
@@ -624,7 +625,7 @@ struct IconButton: View {
             Image(systemName: symbol).font(.system(size: 14, weight: .medium))
                 .foregroundStyle(.white.opacity(hovered || active ? 1 : 0.9))
                 .frame(width: 28, height: 32).contentShape(Rectangle())
-        }.buttonStyle(.plain).onHover { hovered = $0 }.help(label).accessibilityLabel(label)
+        }.buttonStyle(.plain).onHover { hovered = $0 }.help(help ?? label).accessibilityLabel(label)
     }
 }
 

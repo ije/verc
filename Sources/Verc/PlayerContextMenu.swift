@@ -26,8 +26,25 @@ final class PlayerMenuView: NSView {
             PlayerMenuItem("Open URL…") { player.showURL = true }
         ]
         if player.current != nil {
+            let subtitles = player.subtitleTracks.filter { $0.id != -1 }
+            var subtitleItems: [NSMenuItem] = [PlayerMenuItem("Add Subtitles…") { player.openFiles(subtitles: true) }]
+            if !subtitles.isEmpty {
+                subtitleItems += [
+                    .separator(),
+                    PlayerMenuItem("Off", checked: player.subtitleID == -1) {
+                        player.subtitleID = -1
+                        player.send(.track(-1, true))
+                    }
+                ] + subtitles.map { track in
+                    PlayerMenuItem(track.name, checked: player.subtitleID == track.id) {
+                        player.subtitleID = track.id
+                        player.send(.track(track.id, true))
+                    }
+                }
+            }
             items += [
-                PlayerMenuItem("Add Subtitles…") { player.openFiles(subtitles: true) },
+                PlayerMenuItem("Subtitles", children: subtitleItems),
+                PlayerMenuItem("Save Current Frame", enabled: player.canSaveFrame) { player.saveFrame() },
                 .separator(),
                 PlayerMenuItem("Stop") { player.stop() },
                 PlayerMenuItem(player.isPlaying ? "Pause" : "Play") { player.togglePlay() },

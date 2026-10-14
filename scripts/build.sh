@@ -76,6 +76,12 @@ clang -dynamiclib -arch arm64 -mmacosx-version-min=26.0 -Os \
   -install_name @rpath/libvercsub_plugin.dylib \
   Sources/VLC/Subtitle.c -o "$destination/plugins/libvercsub_plugin.dylib" \
   || fail "Cannot build the subtitle layout plugin."
+clang -dynamiclib -arch arm64 -mmacosx-version-min=26.0 -Os \
+  -D__PLUGIN__ -DMODULE_NAME=vercsnapshot '-DMODULE_STRING="vercsnapshot"' \
+  -I Vendor/VLC/include -undefined dynamic_lookup \
+  -install_name @rpath/libvercsnapshot_plugin.dylib \
+  Sources/VLC/Snapshot.c -o "$destination/plugins/libvercsnapshot_plugin.dylib" \
+  || fail "Cannot build the snapshot conversion plugin."
 
 while IFS= read -r -d '' file; do
   archs=$(lipo -archs "$file") || fail "ARM64 is missing: $file"
@@ -99,7 +105,7 @@ fi
 cp scripts/vlc-plugins.json "$app/Contents/Resources/VLC-plugins.json"
 cat > "$app/Contents/Resources/VLC-runtime.txt" <<EOF
 Selected playback runtime from $runtime
-$plugin_count VLC plugins plus Verc's subtitle layout plugin. No VLC desktop UI, extensions, translations, capture, casting, or dedicated encoder modules.
+$plugin_count VLC plugins plus Verc's subtitle layout and snapshot conversion plugins. No VLC desktop UI, extensions, translations, capture, casting, or dedicated encoder modules.
 Include corresponding VLC and dependency sources when you distribute this bundle. See NOTICE.
 EOF
 sign=(codesign --force --sign "${SIGNING_IDENTITY:--}")
@@ -119,4 +125,4 @@ mkdir -p "$root/dist"
 rm -rf "$output"
 mv "$app" "$output"
 size=$(awk -v bytes="$bytes" 'BEGIN { printf "%.2f", bytes / 1048576 }')
-printf '\n%s\nStandalone · ARM64 · macOS 26+ · %s MiB total · %s playback plugins\n' "$output" "$size" "$((plugin_count + 1))"
+printf '\n%s\nStandalone · ARM64 · macOS 26+ · %s MiB total · %s playback plugins\n' "$output" "$size" "$((plugin_count + 2))"

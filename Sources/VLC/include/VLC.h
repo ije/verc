@@ -27,6 +27,7 @@ int vc_seekable(VCEngine *engine);
 void vc_seek(VCEngine *engine, int64_t milliseconds);
 void vc_volume(VCEngine *engine, int volume);
 int vc_rate(VCEngine *engine, float rate);
+int vc_snapshot(VCEngine *engine, const char *path);
 int vc_video_size(VCEngine *engine, unsigned *width, unsigned *height, unsigned *ratioWidth, unsigned *ratioHeight);
 VCTrack *vc_tracks(VCEngine *engine, int subtitles);
 void vc_free_tracks(VCEngine *engine, VCTrack *tracks);

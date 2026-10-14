@@ -62,6 +62,7 @@ typedef struct {
     X(void, media_player_set_time, (void *, int64_t)) \
     X(int, audio_set_volume, (void *, int)) \
     X(int, media_player_set_rate, (void *, float)) \
+    X(int, video_take_snapshot, (void *, unsigned, const char *, unsigned, unsigned)) \
     X(VCTrack *, audio_get_track_description, (void *)) \
     X(VCTrack *, video_get_spu_description, (void *)) \
     X(void, track_description_list_release, (VCTrack *)) \
@@ -242,6 +243,7 @@ int vc_seekable(VCEngine *e) { return e->media_player_is_seekable(e->player); }
 void vc_seek(VCEngine *e, int64_t time) { e->media_player_set_time(e->player, time); }
 void vc_volume(VCEngine *e, int volume) { e->audio_set_volume(e->player, volume); }
 int vc_rate(VCEngine *e, float rate) { return e->media_player_set_rate(e->player, rate); }
+int vc_snapshot(VCEngine *e, const char *path) { return e->video_take_snapshot(e->player, 0, path, 0, 0); }
 int vc_video_size(VCEngine *e, unsigned *width, unsigned *height, unsigned *ratioWidth, unsigned *ratioHeight) {
     void *media = e->media_player_get_media(e->player);
     if (!media) return -1;

@@ -6,7 +6,7 @@ let package = Package(
     platforms: [.macOS("26.0")],
     products: [.executable(name: "Verc", targets: ["Verc"])],
     targets: [
-        .target(name: "VLC", exclude: ["Subtitle.c"], linkerSettings: [.linkedLibrary("dl")]),
+        .target(name: "VLC", exclude: ["Subtitle.c", "Snapshot.c"], linkerSettings: [.linkedLibrary("dl")]),
         .executableTarget(name: "Verc", dependencies: ["VLC"], exclude: ["Prism.metal"])
     ],
     swiftLanguageModes: [.v6]
