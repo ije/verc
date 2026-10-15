@@ -8,12 +8,12 @@ struct VercApp: App {
 
     var body: some Scene {
         Window("Verc", id: "player") {
-            ContentView(player: delegate.player, showPlaylist: $showPlaylist)
+            ContentView(player: delegate.player, favorites: delegate.favorites, showPlaylist: $showPlaylist)
                 .frame(minWidth: 640, minHeight: 360)
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1080, height: 608)
-        .commands { PlayerCommands(player: delegate.player, showPlaylist: $showPlaylist) }
+        .commands { PlayerCommands(player: delegate.player, favorites: delegate.favorites, showPlaylist: $showPlaylist) }
 
         Window("About Verc", id: "about") {
             VStack(spacing: 16) {
@@ -47,6 +47,7 @@ struct VercApp: App {
 
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
     let player = PlayerModel()
+    let favorites = FavoritePages()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -75,6 +76,7 @@ struct VercApp: App {
 
 struct PlayerCommands: Commands {
     @Bindable var player: PlayerModel
+    let favorites: FavoritePages
     @Environment(\.openWindow) private var openWindow
     @Binding var showPlaylist: Bool
 
@@ -106,17 +108,23 @@ struct PlayerCommands: Commands {
             }
         }
         CommandMenu("Playback") {
-            Button(player.isPlaying ? "Pause" : "Play") { player.togglePlay() }.keyboardShortcut(.space, modifiers: [])
+            // Menu key equivalents run before text fields get the key, so turn off single keys while one is shown.
+            let typing = player.showURL || favorites.draft != nil
+            Button(player.isPlaying ? "Pause" : "Play") { player.togglePlay() }
+                .keyboardShortcut(typing ? nil : KeyboardShortcut(.space, modifiers: []))
             Button("Stop") { player.stop() }.keyboardShortcut(".").disabled(player.current == nil)
             Divider()
-            Button("Back 10 Seconds") { player.seek(by: -10) }.keyboardShortcut(.leftArrow, modifiers: []).disabled(!player.seekable)
-            Button("Forward 10 Seconds") { player.seek(by: 10) }.keyboardShortcut(.rightArrow, modifiers: []).disabled(!player.seekable)
+            Button("Back 10 Seconds") { player.seek(by: -10) }
+                .keyboardShortcut(typing ? nil : KeyboardShortcut(.leftArrow, modifiers: [])).disabled(!player.seekable)
+            Button("Forward 10 Seconds") { player.seek(by: 10) }
+                .keyboardShortcut(typing ? nil : KeyboardShortcut(.rightArrow, modifiers: [])).disabled(!player.seekable)
             Divider()
-            Toggle("Mute", isOn: $player.muted).keyboardShortcut("m", modifiers: [])
+            Toggle("Mute", isOn: $player.muted)
+                .keyboardShortcut(typing ? nil : KeyboardShortcut("m", modifiers: []))
             Button("Volume Up") { player.volume = min(1, player.volume + 0.05) }
-                .keyboardShortcut(showPlaylist ? nil : KeyboardShortcut(.upArrow, modifiers: []))
+                .keyboardShortcut(showPlaylist || typing ? nil : KeyboardShortcut(.upArrow, modifiers: []))
             Button("Volume Down") { player.volume = max(0, player.volume - 0.05) }
-                .keyboardShortcut(showPlaylist ? nil : KeyboardShortcut(.downArrow, modifiers: []))
+                .keyboardShortcut(showPlaylist || typing ? nil : KeyboardShortcut(.downArrow, modifiers: []))
             Divider()
             Picker("Repeat", selection: $player.repeatMode) {
                 ForEach(RepeatMode.allCases, id: \.self) { mode in Text(mode.rawValue).tag(mode) }

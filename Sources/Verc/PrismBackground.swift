@@ -3,11 +3,12 @@ import os
 import SwiftUI
 
 struct PrismBackground: View {
+    var hidden = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        PrismSurface(suspended: scenePhase != .active, reduceMotion: reduceMotion)
+        PrismSurface(suspended: hidden || scenePhase != .active, reduceMotion: reduceMotion)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }

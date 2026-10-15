@@ -7,6 +7,7 @@ enum Theme {
 
 struct ContentView: View {
     @Bindable var player: PlayerModel
+    @Bindable var favorites: FavoritePages
     @Binding var showPlaylist: Bool
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -49,8 +50,11 @@ struct ContentView: View {
 
     private var playerCanvas: some View {
         ZStack {
-            stage
-            if player.current != nil {
+            if player.current == nil {
+                StartPage(player: player, favorites: favorites)
+                    .allowsHitTesting(popup == nil)
+            } else {
+                stage
                 VStack {
                     LinearGradient(colors: [.black.opacity(0.65), .clear], startPoint: .top, endPoint: .bottom).frame(height: 105)
                     Spacer(minLength: 0)
@@ -90,7 +94,7 @@ struct ContentView: View {
         .clipped()
         .background(.black)
         .onGeometryChange(for: CGSize.self) { $0.size } action: { player.viewport = $0 }
-        .overlay { PlayerContextMenu(player: player) }
+        .overlay { if player.current != nil { PlayerContextMenu(player: player) } }
     }
 
     private var interactiveCanvas: some View {
@@ -154,6 +158,7 @@ struct ContentView: View {
         .alert("Unable to complete action", isPresented: Binding<Bool>(get: { player.error != nil }, set: { if !$0 { player.error = nil } })) {
             Button("OK") { player.error = nil }
         } message: { Text(player.error ?? "") }
+        .sheet(item: $favorites.draft) { FavoriteEditor(favorites: favorites, page: $0).preferredColorScheme(.dark) }
     }
 
     private func revealControls() {
@@ -181,7 +186,7 @@ struct ContentView: View {
                     showPlaylist = true
                 }
                 .padding(.trailing, 12)
-            } else if player.current == nil {
+            } else if player.current == nil && favorites.selection == nil {
                 GlassIconButton(symbol: "info", label: "About Verc", size: 18) {
                     popup = popup == .credits ? nil : .credits
                 }
@@ -294,63 +299,42 @@ struct ContentView: View {
 
     private var stage: some View {
         ZStack {
-            if player.current != nil {
-                Color.black
-                VideoSurface(player: player, attached: !player.isPictureInPicture, controlsVisible: controlsVisible)
-                if player.isPictureInPicture {
-                    VStack(spacing: 16) {
-                        Image(systemName: "pip").font(.system(size: 36, weight: .light))
-                        Text("Playing in Picture in Picture").font(.system(size: 14))
-                        Button("Return to window") { player.endPictureInPicture() }.buttonStyle(.plain)
-                    }.foregroundStyle(.white.opacity(0.7))
-                } else if player.current?.isAudio == true || (!player.isLoading && player.videoWidth == 0 && !player.audioTracks.isEmpty) {
-                    VStack(spacing: 20) {
-                        Image(systemName: "waveform").font(.system(size: 60, weight: .ultraLight)).foregroundStyle(.white.opacity(0.6))
-                        Text(player.current?.title ?? "").font(.system(size: 24, weight: .medium)).foregroundStyle(.white).lineLimit(2)
-                    }
-                    .padding(40).offset(y: -65)
+            Color.black
+            VideoSurface(player: player, attached: !player.isPictureInPicture, controlsVisible: controlsVisible)
+            if player.isPictureInPicture {
+                VStack(spacing: 16) {
+                    Image(systemName: "pip").font(.system(size: 36, weight: .light))
+                    Text("Playing in Picture in Picture").font(.system(size: 14))
+                    Button("Return to window") { player.endPictureInPicture() }.buttonStyle(.plain)
+                }.foregroundStyle(.white.opacity(0.7))
+            } else if player.current?.isAudio == true || (!player.isLoading && player.videoWidth == 0 && !player.audioTracks.isEmpty) {
+                VStack(spacing: 20) {
+                    Image(systemName: "waveform").font(.system(size: 60, weight: .ultraLight)).foregroundStyle(.white.opacity(0.6))
+                    Text(player.current?.title ?? "").font(.system(size: 24, weight: .medium)).foregroundStyle(.white).lineLimit(2)
                 }
-                if player.isLoading { ProgressView().controlSize(.small).tint(.white) }
-                if player.state == 7 {
-                    VStack(spacing: 12) {
-                        Image(systemName: "exclamationmark.triangle").font(.largeTitle)
-                        Text("Couldn’t play this media.").font(.headline)
-                        Button("Open another file") { player.openFiles() }.buttonStyle(.bordered)
-                    }.foregroundStyle(.white)
-                }
-            } else {
-                emptyState
+                .padding(40).offset(y: -65)
+            }
+            if player.isLoading { ProgressView().controlSize(.small).tint(.white) }
+            if player.state == 7 {
+                VStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle").font(.largeTitle)
+                    Text("Couldn’t play this media.").font(.headline)
+                    Button("Open another file") { player.openFiles() }.buttonStyle(.bordered)
+                }.foregroundStyle(.white)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped().contentShape(Rectangle())
         .onTapGesture(count: 2) {
             if showPlaylist { showPlaylist = false }
-            else if player.current == nil { player.openFiles() }
             else { NSApp.keyWindow?.toggleFullScreen(nil) }
         }
         .onTapGesture {
             if showPlaylist { showPlaylist = false }
-            else if player.current != nil { player.togglePlay(); revealControls() }
+            else { player.togglePlay(); revealControls() }
         }
         .gesture(WindowDragGesture())
         .allowsHitTesting(popup == nil)
-    }
-
-    private var emptyState: some View {
-        PrismBackground()
-        .ignoresSafeArea()
-        .overlay(alignment: .bottom) {
-            VStack(spacing: 20) {
-                Text("Drop media here or double-click to open.").font(.system(size: 15)).foregroundStyle(.secondary)
-                if let message = player.engineError {
-                    Label(message, systemImage: "exclamationmark.circle").font(.system(size: 11)).foregroundStyle(.orange)
-                }
-            }
-            .shadow(color: .black, radius: 3)
-            .padding(40)
-            .allowsHitTesting(false)
-        }
     }
 
     private var transport: some View {
@@ -637,7 +621,7 @@ private struct CreditsPopover<Content: View>: NSViewRepresentable {
             panel.title = "Credits"
             panel.isOpaque = false
             panel.backgroundColor = .clear
-            panel.hasShadow = true
+            panel.hasShadow = false
             panel.hidesOnDeactivate = true
             panel.level = .popUpMenu
             panel.collectionBehavior = [.transient, .fullScreenAuxiliary]
