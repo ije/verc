@@ -6,12 +6,17 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdatomic.h>
+#include <pthread.h>
+#include <math.h>
 
 // Event types from libvlc_events.h.
 #define VC_EVENT_ERROR 0x10A    // libvlc_MediaPlayerEncounteredError
 #define VC_EVENT_ES_ADDED 0x114 // libvlc_MediaPlayerESAdded
 #define VC_EVENT_PARSED 3
 #define VC_TRACK_VIDEO 1        // libvlc_track_video
+#define VC_TRACK_TEXT 2         // libvlc_track_text
+#define VC_META_ARTWORK_URL 15
+#define VC_PARSE_FETCH_LOCAL 2
 
 // Leading fields of libvlc_media_track_t and libvlc_video_track_t from libvlc_media.h.
 typedef struct {
@@ -34,12 +39,17 @@ typedef struct {
     X(int, event_attach, (void *, int, void (*)(const void *, void *), void *)) \
     X(void, event_detach, (void *, int, void (*)(const void *, void *), void *)) \
     X(void *, media_new_location, (void *, const char *)) \
+    X(void, media_add_option, (void *, const char *)) \
+    X(int, media_slaves_add, (void *, unsigned, unsigned, const char *)) \
+    X(unsigned, media_slaves_get, (void *, VCMediaSlave ***)) \
+    X(void, media_slaves_release, (VCMediaSlave **, unsigned)) \
     X(void, media_release, (void *)) \
     X(void *, media_event_manager, (void *)) \
     X(int, media_parse_with_options, (void *, int, int)) \
     X(void, media_parse_stop, (void *)) \
     X(int, media_get_parsed_status, (void *)) \
     X(int64_t, media_get_duration, (void *)) \
+    X(char *, media_get_meta, (void *, int)) \
     X(char *, media_get_mrl, (void *)) \
     X(unsigned, media_tracks_get, (void *, VCMediaTrack ***)) \
     X(void, media_tracks_release, (VCMediaTrack **, unsigned)) \
@@ -63,6 +73,8 @@ typedef struct {
     X(int, audio_set_volume, (void *, int)) \
     X(int, media_player_set_rate, (void *, float)) \
     X(int, video_take_snapshot, (void *, unsigned, const char *, unsigned, unsigned)) \
+    X(void, video_set_callbacks, (void *, void *(*)(void *, void **), void (*)(void *, void *, void *const *), void (*)(void *, void *), void *)) \
+    X(void, video_set_format, (void *, const char *, unsigned, unsigned, unsigned)) \
     X(VCTrack *, audio_get_track_description, (void *)) \
     X(VCTrack *, video_get_spu_description, (void *)) \
     X(void, track_description_list_release, (VCTrack *)) \
@@ -143,7 +155,7 @@ VCEngine *vc_create(const char *directory, char *error, int capacity) {
         "--no-media-library", "--no-video-on-top", "--no-mouse-events",
         "--no-keyboard-events", "--no-snapshot-preview", "--quiet",
         "--videotoolbox", "--videotoolbox-hw-decoder-only", "--avcodec-hw=any",
-        "--vout=macosx", "--aout=auhal", "--sub-track=0",
+        "--vout=macosx", "--aout=auhal", "--sub-track=0", "--sub-autodetect-path=",
         subtitlesAvailable ? "--sub-filter=vercsub" : "--sub-filter="
     };
     engine->instance = engine->new(sizeof(options) / sizeof(options[0]), options);
@@ -173,14 +185,33 @@ void vc_destroy(VCEngine *e) {
     free(e);
 }
 
+static VCVideoTrack video_track(VCEngine *e, void *media) {
+    VCVideoTrack found = { 0 };
+    VCMediaTrack **tracks = NULL;
+    unsigned count = e->media_tracks_get(media, &tracks);
+    for (unsigned index = 0; index < count; index++) {
+        VCVideoTrack *video = tracks[index]->type == VC_TRACK_VIDEO ? tracks[index]->video : NULL;
+        if (video && video->width && video->height) { found = *video; break; }
+    }
+    if (count) e->media_tracks_release(tracks, count);
+    return found;
+}
+static void start_at(VCEngine *e, void *media, double seconds) {
+    char option[64];
+    snprintf(option, sizeof(option), ":start-time=%.3f", seconds);
+    e->media_add_option(media, option);
+}
+
 const char *vc_version(VCEngine *e) { return e->get_version(); }
 void vc_drawable(VCEngine *e, void *view) { e->media_player_set_nsobject(e->player, view); }
-int vc_open(VCEngine *e, const char *uri) {
+int vc_open(VCEngine *e, const char *uri, double start, const char *const *subtitles, int count) {
     e->media_player_stop(e->player);
     atomic_store(&e->failed, false);
     atomic_store(&e->playable, false);
     void *media = e->media_new_location(e->instance, uri);
     if (!media) return -1;
+    if (start > 0 && isfinite(start)) start_at(e, media, start);
+    for (int i = 0; i < count; i++) e->media_slaves_add(media, 0, 3, subtitles[i]);
     e->media_player_set_media(e->player, media);
     e->media_release(media);
     return e->media_player_play(e->player);
@@ -191,12 +222,12 @@ int vc_state(VCEngine *e) { return e->media_player_get_state(e->player); }
 int vc_failed(VCEngine *e) { return atomic_load(&e->failed) || !atomic_load(&e->playable); }
 int64_t vc_time(VCEngine *e) { return e->media_player_get_time(e->player); }
 int64_t vc_duration(VCEngine *e) { return e->media_player_get_length(e->player); }
-static bool parse(VCEngine *e, void *media, int network) {
+static bool parse(VCEngine *e, void *media, int flags) {
     bool parsed = false;
     void *events = e->media_event_manager(media);
     dispatch_semaphore_t signal = dispatch_semaphore_create(0);
     if (e->event_attach(events, VC_EVENT_PARSED, parsed_media, signal) == 0) {
-        parsed = e->media_parse_with_options(media, network, 3000) == 0 &&
+        parsed = e->media_parse_with_options(media, flags, 3000) == 0 &&
             dispatch_semaphore_wait(signal, dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC)) == 0 &&
             e->media_get_parsed_status(media) == 4;
         e->media_parse_stop(media);
@@ -205,13 +236,99 @@ static bool parse(VCEngine *e, void *media, int network) {
     dispatch_release(signal);
     return parsed;
 }
-int64_t vc_read_duration(VCEngine *e, const char *uri) {
+VCMediaInfo vc_read_media_info(VCEngine *e, const char *uri) {
+    VCMediaInfo info = { .duration = -1, .subtitleCount = -1 };
     void *media = e->media_new_location(e->instance, uri);
-    if (!media) return -1;
-    int64_t duration = parse(e, media, 0) ? e->media_get_duration(media) : -1;
+    if (!media) return info;
+    if (parse(e, media, 0)) {
+        info.duration = e->media_get_duration(media);
+        VCVideoTrack video = video_track(e, media);
+        bool swap = video.orientation & 4;
+        info.width = swap ? video.height : video.width;
+        info.height = swap ? video.width : video.height;
+        VCMediaTrack **tracks = NULL;
+        unsigned count = e->media_tracks_get(media, &tracks);
+        info.subtitleCount = 0;
+        for (unsigned i = 0; i < count; i++) {
+            if (tracks[i]->type == VC_TRACK_TEXT) info.subtitleCount++;
+        }
+        if (count) e->media_tracks_release(tracks, count);
+    }
     e->media_release(media);
-    return duration;
+    return info;
 }
+
+typedef struct {
+    uint8_t *pixels;
+    pthread_mutex_t lock;
+    dispatch_semaphore_t signal;
+    bool decoded;
+} VCPreviewBuffer;
+
+static void *preview_lock(void *opaque, void **planes) {
+    VCPreviewBuffer *buffer = opaque;
+    pthread_mutex_lock(&buffer->lock);
+    *planes = buffer->pixels;
+    return NULL;
+}
+
+static void preview_unlock(void *opaque, void *picture, void *const *planes) {
+    (void)picture;
+    (void)planes;
+    VCPreviewBuffer *buffer = opaque;
+    if (!buffer->decoded) {
+        buffer->decoded = true;
+        dispatch_semaphore_signal(buffer->signal);
+    }
+    pthread_mutex_unlock(&buffer->lock);
+}
+
+VCPreview vc_read_preview(VCEngine *e, const char *uri, int video) {
+    VCPreview preview = { .duration = -1 };
+    void *media = e->media_new_location(e->instance, uri);
+    if (!media) return preview;
+    if (parse(e, media, VC_PARSE_FETCH_LOCAL)) {
+        preview.duration = e->media_get_duration(media);
+        preview.artwork = e->media_get_meta(media, VC_META_ARTWORK_URL);
+    }
+    VCVideoTrack track = video ? video_track(e, media) : (VCVideoTrack){ 0 };
+    if (track.width) {
+        double width = track.width, height = track.height;
+        if (track.sarNum && track.sarDen) width *= (double)track.sarNum / track.sarDen;
+        if (track.orientation & 4) { double swap = width; width = height; height = swap; }
+        double scale = fmin(1, 960 / fmax(width, height));
+        preview.width = fmax(1, round(width * scale));
+        preview.height = fmax(1, round(height * scale));
+        preview.pitch = (preview.width * 4 + 31) & ~31u;
+    }
+    void *player = preview.width ? e->media_player_new(e->instance) : NULL;
+    if (player && posix_memalign((void **)&preview.pixels, 32, preview.pitch * preview.height) == 0) {
+        VCPreviewBuffer buffer = { .pixels = preview.pixels, .lock = PTHREAD_MUTEX_INITIALIZER,
+                                   .signal = dispatch_semaphore_create(0) };
+        const char *options[] = { ":no-audio", ":no-spu", ":sub-filter=", ":codec=avcodec,dav1d,vpx,theora", ":avcodec-hw=none" };
+        for (unsigned index = 0; index < sizeof(options) / sizeof(options[0]); index++) e->media_add_option(media, options[index]);
+        start_at(e, media, fmin(30, fmax(0, preview.duration / 10000.0)));
+        e->media_player_set_media(player, media);
+        e->video_set_callbacks(player, preview_lock, preview_unlock, NULL, &buffer);
+        e->video_set_format(player, "RV32", preview.width, preview.height, preview.pitch);
+        bool decoded = e->media_player_play(player) == 0 &&
+            dispatch_semaphore_wait(buffer.signal, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC)) == 0;
+        // Stop joins the video callbacks before their buffer and synchronization objects are released.
+        e->media_player_stop(player);
+        if (!decoded) { free(preview.pixels); preview.pixels = NULL; }
+        pthread_mutex_destroy(&buffer.lock);
+        dispatch_release(buffer.signal);
+    }
+    if (player) e->media_player_release(player);
+    e->media_release(media);
+    return preview;
+}
+
+void vc_free_preview(VCPreview *preview) {
+    free(preview->artwork);
+    free(preview->pixels);
+}
+
 // libVLC 3 plays a playlist file as empty media, so read its entries instead.
 char **vc_read_playlist(VCEngine *e, const char *uri) {
     void *media = e->media_new_location(e->instance, uri);
@@ -247,33 +364,35 @@ int vc_snapshot(VCEngine *e, const char *path) { return e->video_take_snapshot(e
 int vc_video_size(VCEngine *e, unsigned *width, unsigned *height, unsigned *ratioWidth, unsigned *ratioHeight) {
     void *media = e->media_player_get_media(e->player);
     if (!media) return -1;
-    VCMediaTrack **tracks = NULL;
-    unsigned count = e->media_tracks_get(media, &tracks);
-    int result = -1;
-    for (unsigned index = 0; index < count && result != 0; index++) {
-        VCVideoTrack *video = tracks[index]->type == VC_TRACK_VIDEO ? tracks[index]->video : NULL;
-        if (!video || !video->width || !video->height) continue;
-        bool square = !video->sarNum || !video->sarDen;
-        uint64_t x = (uint64_t)video->width * (square ? 1 : video->sarNum);
-        uint64_t y = (uint64_t)video->height * (square ? 1 : video->sarDen);
-        uint64_t divisor = x, remainder = y;
-        while (remainder) { uint64_t next = divisor % remainder; divisor = remainder; remainder = next; }
-        // Orientations 4 to 7 transpose the picture.
-        bool swap = video->orientation & 4;
-        *width = swap ? video->height : video->width;
-        *height = swap ? video->width : video->height;
-        *ratioWidth = (unsigned)((swap ? y : x) / divisor);
-        *ratioHeight = (unsigned)((swap ? x : y) / divisor);
-        result = 0;
-    }
-    if (count) e->media_tracks_release(tracks, count);
+    VCVideoTrack video = video_track(e, media);
     e->media_release(media);
-    return result;
+    if (!video.width) return -1;
+    bool square = !video.sarNum || !video.sarDen;
+    uint64_t x = (uint64_t)video.width * (square ? 1 : video.sarNum);
+    uint64_t y = (uint64_t)video.height * (square ? 1 : video.sarDen);
+    uint64_t divisor = x, remainder = y;
+    while (remainder) { uint64_t next = divisor % remainder; divisor = remainder; remainder = next; }
+    // Orientations 4 to 7 transpose the picture.
+    bool swap = video.orientation & 4;
+    *width = swap ? video.height : video.width;
+    *height = swap ? video.width : video.height;
+    *ratioWidth = (unsigned)((swap ? y : x) / divisor);
+    *ratioHeight = (unsigned)((swap ? x : y) / divisor);
+    return 0;
 }
 VCTrack *vc_tracks(VCEngine *e, int subtitles) {
     return subtitles ? e->video_get_spu_description(e->player) : e->audio_get_track_description(e->player);
 }
 void vc_free_tracks(VCEngine *e, VCTrack *tracks) { e->track_description_list_release(tracks); }
+unsigned vc_media_slaves(VCEngine *e, VCMediaSlave ***slaves) {
+    *slaves = NULL;
+    void *media = e->media_player_get_media(e->player);
+    if (!media) return 0;
+    unsigned count = e->media_slaves_get(media, slaves);
+    e->media_release(media);
+    return count;
+}
+void vc_free_media_slaves(VCEngine *e, VCMediaSlave **slaves, unsigned count) { e->media_slaves_release(slaves, count); }
 int vc_selected_track(VCEngine *e, int subtitles) {
     return subtitles ? e->video_get_spu(e->player) : e->audio_get_track(e->player);
 }

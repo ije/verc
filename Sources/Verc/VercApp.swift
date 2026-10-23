@@ -52,12 +52,19 @@ struct VercApp: App {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        player.openLibrary = { [weak self] urls in
+            guard let self else { return false }
+            return favorites.open(urls, player: player)
+        }
+        Task { await favorites.load() }
         let arguments = CommandLine.arguments.dropFirst().filter { !$0.hasPrefix("-") }
         let files = arguments.filter { FileManager.default.fileExists(atPath: $0) }.map { URL(fileURLWithPath: $0) }
-        if !files.isEmpty { player.add(files) }
+        if !files.isEmpty, !favorites.open(files, player: player) { player.add(files) }
     }
 
-    func application(_ application: NSApplication, open urls: [URL]) { player.add(urls) }
+    func application(_ application: NSApplication, open urls: [URL]) {
+        if !favorites.open(urls, player: player) { player.add(urls) }
+    }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if player.isPictureInPicture { player.endPictureInPicture(); return false }
@@ -109,15 +116,15 @@ struct PlayerCommands: Commands {
         }
         CommandMenu("Playback") {
             // Menu key equivalents run before text fields get the key, so turn off single keys while one is shown.
-            let typing = player.showURL || favorites.draft != nil
-            Button(player.isPlaying ? "Pause" : "Play") { player.togglePlay() }
+            let typing = player.showURL || favorites.draft != nil || favorites.showAllMedia && player.current == nil
+            Button(player.playLabel) { player.togglePlay() }
                 .keyboardShortcut(typing ? nil : KeyboardShortcut(.space, modifiers: []))
             Button("Stop") { player.stop() }.keyboardShortcut(".").disabled(player.current == nil)
             Divider()
-            Button("Back 10 Seconds") { player.seek(by: -10) }
-                .keyboardShortcut(typing ? nil : KeyboardShortcut(.leftArrow, modifiers: [])).disabled(!player.seekable)
-            Button("Forward 10 Seconds") { player.seek(by: 10) }
-                .keyboardShortcut(typing ? nil : KeyboardShortcut(.rightArrow, modifiers: [])).disabled(!player.seekable)
+            Button("Skip Backward 10 Seconds") { player.seek(by: -10) }
+                .keyboardShortcut(typing || player.current == nil ? nil : KeyboardShortcut(.leftArrow, modifiers: [])).disabled(!player.seekable)
+            Button("Skip Forward 10 Seconds") { player.seek(by: 10) }
+                .keyboardShortcut(typing || player.current == nil ? nil : KeyboardShortcut(.rightArrow, modifiers: [])).disabled(!player.seekable)
             Divider()
             Toggle("Mute", isOn: $player.muted)
                 .keyboardShortcut(typing ? nil : KeyboardShortcut("m", modifiers: []))
@@ -131,11 +138,27 @@ struct PlayerCommands: Commands {
             }
         }
         CommandGroup(after: .toolbar) {
+            let browsing = player.current == nil && !player.showURL && !player.showInfo && favorites.draft == nil
+                && favorites.pendingDeletion == nil && !favorites.showAllMedia
+            Button("Previous Preview") { favorites.movePreview(by: -1) }
+                .keyboardShortcut(browsing ? KeyboardShortcut(.leftArrow, modifiers: []) : nil)
+                .disabled(!browsing || favorites.selection == nil)
+            Button("Next Preview") { favorites.movePreview(by: 1) }
+                .keyboardShortcut(browsing ? KeyboardShortcut(.rightArrow, modifiers: []) : nil)
+                .disabled(!browsing || favorites.selection == nil)
+            Button("Previous Page") { favorites.movePage(by: -1) }
+                .keyboardShortcut(browsing ? KeyboardShortcut(.leftArrow) : nil)
+                .disabled(!browsing || favorites.pages.isEmpty)
+            Button("Next Page") { favorites.movePage(by: 1) }
+                .keyboardShortcut(browsing ? KeyboardShortcut(.rightArrow) : nil)
+                .disabled(!browsing || favorites.pages.isEmpty)
+            Divider()
             Button("Show Playlist") { showPlaylist = true }.keyboardShortcut("l").disabled(player.playlist.count < 2)
             Toggle("Fill Window", isOn: $player.fillVideo)
-            Button(player.isPictureInPicture ? "Exit Picture in Picture" : "Picture in Picture") { player.togglePictureInPicture() }
+            Button(player.pictureInPictureLabel) { player.togglePictureInPicture() }
                 .keyboardShortcut("p", modifiers: [.command, .shift]).disabled(!player.canPictureInPicture)
-            Button("Media Information") { player.showInfo = true }.keyboardShortcut("i").disabled(player.current == nil)
+            Button("Media Information") { player.showInfo = true }
+                .keyboardShortcut(player.current == nil ? nil : KeyboardShortcut("i")).disabled(player.current == nil)
         }
     }
 }

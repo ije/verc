@@ -60,7 +60,7 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 location=$("${swift[@]}" --show-bin-path) || fail "Cannot locate the compiled app."
 cp "$location/Verc" "$app/Contents/MacOS/Verc"
 cp Resources/Info.plist "$app/Contents/Info.plist"
-cp Resources/Verc.icns Resources/LineMD-LICENSE.txt Resources/Vgpu-LICENSE.txt LICENSE NOTICE "$app/Contents/Resources/"
+cp Resources/Verc.icns Resources/VercLibrary.icns Resources/TMDB.svg Resources/LineMD-LICENSE.txt Resources/Vgpu-LICENSE.txt LICENSE NOTICE "$app/Contents/Resources/"
 xcrun -sdk macosx metal -mmacos-version-min=26.0 Sources/Verc/Prism.metal -o "$app/Contents/Resources/default.metallib" \
   || fail "Cannot compile the Metal shaders. Install the Metal Toolchain: xcodebuild -downloadComponent MetalToolchain"
 

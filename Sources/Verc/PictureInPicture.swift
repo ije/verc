@@ -127,7 +127,7 @@ private struct PictureInPictureView: View {
                     LinearGradient(colors: [.black.opacity(0.4), .clear], startPoint: .top, endPoint: .bottom)
                     VStack {
                         HStack {
-                            IconButton(symbol: "pip.exit", label: "Return to window") { player.endPictureInPicture() }
+                            IconButton(symbol: "pip.exit", label: "Exit Picture in Picture") { player.endPictureInPicture() }
                             Spacer()
                         }
                         Spacer()
@@ -142,8 +142,8 @@ private struct PictureInPictureView: View {
                                 .shadow(color: .black.opacity(0.4), radius: 8, y: 2)
                         }
                         .buttonStyle(.plain)
-                        .help("Play")
-                        .accessibilityLabel("Play")
+                        .help(player.playLabel)
+                        .accessibilityLabel(player.playLabel)
                     }
                 }
                 .opacity(hovered || !player.isPlaying ? 1 : 0)

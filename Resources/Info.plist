@@ -20,6 +20,23 @@
     <key>CFBundleDocumentTypes</key>
     <array>
         <dict>
+            <key>CFBundleTypeName</key><string>Verc Library</string>
+            <key>CFBundleTypeRole</key><string>Editor</string>
+            <key>LSHandlerRank</key><string>Owner</string>
+            <key>CFBundleTypeExtensions</key><array><string>verclibrary</string></array>
+            <key>LSItemContentTypes</key><array><string>me.jex.verc.library</string></array>
+            <key>CFBundleTypeIconFile</key><string>VercLibrary.icns</string>
+            <key>LSTypeIsPackage</key><true/>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key><string>Verc Library Database</string>
+            <key>CFBundleTypeRole</key><string>None</string>
+            <key>LSHandlerRank</key><string>None</string>
+            <key>CFBundleTypeExtensions</key><array><string>vercdb</string></array>
+            <key>LSItemContentTypes</key><array><string>me.jex.verc.database</string></array>
+            <key>CFBundleTypeIconFile</key><string>VercLibrary.icns</string>
+        </dict>
+        <dict>
             <key>CFBundleTypeName</key><string>Media</string>
             <key>CFBundleTypeRole</key><string>Viewer</string>
             <key>LSHandlerRank</key><string>Alternate</string>
@@ -48,6 +65,27 @@
             <key>CFBundleTypeRole</key><string>Viewer</string>
             <key>LSHandlerRank</key><string>Alternate</string>
             <key>CFBundleTypeExtensions</key><array><string>aqt</string><string>ass</string><string>cdg</string><string>idx</string><string>jss</string><string>mks</string><string>mpsub</string><string>pjs</string><string>psb</string><string>rt</string><string>smi</string><string>srt</string><string>ssa</string><string>sub</string><string>ttml</string><string>usf</string><string>utf</string><string>vtt</string></array>
+        </dict>
+    </array>
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key><string>me.jex.verc.library</string>
+            <key>UTTypeDescription</key><string>Verc Library</string>
+            <key>UTTypeConformsTo</key><array><string>com.apple.package</string></array>
+            <key>UTTypeIconFile</key><string>VercLibrary.icns</string>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>verclibrary</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>me.jex.verc.database</string>
+            <key>UTTypeDescription</key><string>Verc Library Database</string>
+            <key>UTTypeConformsTo</key><array><string>public.data</string></array>
+            <key>UTTypeIconFile</key><string>VercLibrary.icns</string>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>vercdb</string></array>
+            </dict>
         </dict>
     </array>
     <key>UTImportedTypeDeclarations</key>

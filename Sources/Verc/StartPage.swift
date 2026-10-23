@@ -1,44 +1,274 @@
 import AppKit
 import ImageIO
 import Observation
-import QuickLookThumbnailing
 import SwiftUI
 import UniformTypeIdentifiers
+import simd
 
-// Saved in UserDefaults. Add new fields as optionals, or saved favorites stop decoding.
-struct FavoritePage: Identifiable, Codable {
+struct FavoritePage: Identifiable, Codable, Sendable {
     var id = UUID()
     var title = ""
     var media: [URL] = []
     var background: URL?
-}
+    var info: TMDBTitle?
+    var clearedInfoTitle: String?
+    var episodeTitles: [String: String]?
+    var episodeImages: [String: URL]?
+    var directory: String?
+    var cachedArtwork: [String: String]?
 
-private struct StoredPage: Decodable {
-    let page: FavoritePage?
-    init(from decoder: any Decoder) { page = try? FavoritePage(from: decoder) }
+    var artworkURLs: Set<URL> {
+        Set(([info?.posterURL, info?.backgroundURL].compactMap { $0 }
+            + (info?.backgroundURLs ?? []) + Array((episodeImages ?? [:]).values)).filter { !$0.isFileURL })
+    }
+
+    func artworkURL(_ url: URL) -> URL {
+        guard let directory, let name = cachedArtwork?[url.absoluteString] else { return url }
+        return Library.url.appendingPathComponent(directory, isDirectory: true).appendingPathComponent("Artwork", isDirectory: true).appendingPathComponent(name)
+    }
+
+    var editTitle: String { info?.mediaType == .tv ? "Edit TV Show" : info?.mediaType == .movie ? "Edit Movie" : "Edit Media" }
+
+    var lookupKey: [String] { [title] + media.map(\.absoluteString) }
+    var missingSeasons: [Int] {
+        guard info?.mediaType == .tv else { return [] }
+        return Set(media.compactMap { url -> Int? in
+            let item = MediaItem(url: url)
+            guard item.isVideo else { return nil }
+            let filename = MediaFilename(item.title)
+            guard let key = filename.episodeKey, episodeTitles?[key] == nil || episodeImages == nil else { return nil }
+            return filename.season
+        }).sorted()
+    }
+    var seasonSuffix: String {
+        guard info?.mediaType == .tv else { return "" }
+        let seasons = Set(media.compactMap { MediaFilename($0.deletingPathExtension().lastPathComponent).season }).sorted()
+        return seasons.count > 1 ? " · Seasons \(seasons.map(String.init).joined(separator: ", "))" : ""
+    }
+    var displayTitle: String { title + seasonSuffix }
+
+    func title(for url: URL) -> String {
+        let item = MediaItem(url: url)
+        guard let info, item.isVideo else { return item.title }
+        let filename = MediaFilename(item.title)
+        if info.mediaType == .tv, let key = filename.episodeKey {
+            return episodeTitles?[key] ?? item.title
+        }
+        return media.count == 1 ? info.title : item.title
+    }
+
+    func artwork(for url: URL) -> URL? {
+        let item = MediaItem(url: url)
+        guard let info, item.isVideo else { return nil }
+        if info.mediaType == .tv, let key = MediaFilename(item.title).episodeKey {
+            return (episodeImages?[key] ?? info.backgroundURL ?? info.posterURL).map(artworkURL)
+        }
+        return (info.backgroundURL ?? info.posterURL).map(artworkURL)
+    }
+
+    static func drafts(for urls: [URL]) async throws -> [FavoritePage] {
+        try await Task.detached(priority: .userInitiated) {
+            var seen: Set<URL> = []
+            let media = try urls.flatMap { url in
+                guard url.pathExtension.lowercased() != "verclibrary" else { return [URL]() }
+                if try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true {
+                    return try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles])
+                }
+                return [url]
+            }.map(Library.resolve).filter { seen.insert($0.standardizedFileURL).inserted && MediaItem.isMediaFile($0, images: true) }.sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+            var pages: [FavoritePage] = []
+            var groups: [[String]: Int] = [:]
+            for url in media {
+                let item = MediaItem(url: url)
+                let folder = url.deletingLastPathComponent()
+                let filename = MediaFilename(item.title)
+                var title = folder.lastPathComponent
+                let key: [String]
+                if !item.isVideo {
+                    key = ["local", folder.absoluteString]
+                } else {
+                    let folderTitle = MediaFilename(title).title
+                    title = filename.title.isEmpty ? (folderTitle.isEmpty ? MediaFilename(folder.deletingLastPathComponent().lastPathComponent).title : folderTitle) : filename.title
+                    key = [filename.season == nil ? "movie" : "tv", title.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: Locale(identifier: "en_US_POSIX")), filename.year.map(String.init) ?? ""]
+                }
+                if let index = groups[key] { pages[index].media.append(url) }
+                else {
+                    groups[key] = pages.count
+                    pages.append(FavoritePage(title: title, media: [url]))
+                }
+            }
+            return pages
+        }.value
+    }
+
+    mutating func loadEpisodes() async throws -> Bool {
+        guard let info, info.mediaType == .tv else { return true }
+        let seasons = missingSeasons
+        let responses = await withTaskGroup(of: TMDB.Response?.self) { group in
+            for season in seasons { group.addTask { try? await TMDB.load(.init(type: "tv", id: info.id, season: season)) } }
+            return await group.reduce(into: [TMDB.Response?]()) { $0.append($1) }
+        }
+        try Task.checkCancellation()
+        var titles = episodeTitles ?? [:]
+        var images = episodeImages ?? [:]
+        for episode in responses.flatMap({ $0?.episodes ?? [] }) {
+            let key = MediaFilename.episodeKey(episode.season, episode.episode)
+            titles[key] = episode.title
+            images[key] = episode.stillURL
+        }
+        episodeTitles = titles
+        episodeImages = images
+        return !responses.contains { $0 == nil }
+    }
 }
 
 @MainActor @Observable final class FavoritePages {
-    var pages: [FavoritePage] {
-        didSet {
-            if let data = try? JSONEncoder().encode(pages) { UserDefaults.standard.set(data, forKey: "favoritePages") }
-        }
+    var pages: [FavoritePage] = [] {
+        didSet { if ready && !applying { persist() } }
     }
+    private let store = LibraryStore()
+    private var persistence: Task<Void, Never>?
+    private var artworkTask: Task<Void, Never>?
+    private var applying = false
+    private var queued = false
+    private(set) var ready = false
+    private(set) var saving = false
+    var error: String?
     private(set) var selection: UUID?
     private(set) var forward = true
-    var draft: FavoritePage?
+    var previewSelection: URL?
+    var showAllMedia = false
+    var draft: [FavoritePage]?
+    var pendingDeletion: FavoritePage?
+    var selectedPage: FavoritePage? { pages.first { $0.id == selection } }
 
-    init() {
-        // Drop bad entries one by one. A failed decode of the whole list would be saved back as an empty list.
-        pages = UserDefaults.standard.data(forKey: "favoritePages")
-            .flatMap { try? JSONDecoder().decode([StoredPage].self, from: $0) }?
-            .compactMap(\.page).filter { !$0.media.isEmpty } ?? []
+    func load() async {
+        do {
+            pages = try await store.load()
+            ready = true
+            cacheArtwork()
+        } catch { self.error = "The library could not be opened. \(error.localizedDescription)" }
+    }
+
+    // A queued save reads pages when it runs, so it also covers later changes. Saving an older list would move imported files back.
+    private func persist() {
+        guard !queued else { return }
+        queued = true
+        let previous = persistence
+        persistence = Task {
+            await previous?.value
+            queued = false
+            do { _ = try await store.save(pages) }
+            catch { self.error = "The library could not be saved. \(error.localizedDescription)" }
+        }
+    }
+
+    func save(_ pages: [FavoritePage], importing ids: Set<UUID>) async -> Bool {
+        guard ready, !saving else { return false }
+        saving = true
+        defer { saving = false; cacheArtwork() }
+        artworkTask?.cancel()
+        let previous = persistence
+        let task = Task {
+            await previous?.value
+            do {
+                let saved = try await store.save(pages, importing: ids)
+                applying = true
+                self.pages = saved
+                applying = false
+                return true
+            } catch {
+                self.error = "The files could not be added to the library. \(error.localizedDescription)"
+                return false
+            }
+        }
+        persistence = Task { _ = await task.value }
+        return await task.value
+    }
+
+    private func cacheArtwork() {
+        guard ready, !saving else { return }
+        artworkTask?.cancel()
+        let snapshot = pages
+        artworkTask = Task {
+            var changed = false
+            for var page in snapshot {
+                guard !Task.isCancelled else { return }
+                if let info = page.info, info.backgroundURLs == nil,
+                   let response = try? await TMDB.load(.init(type: info.mediaType.rawValue, id: info.id)) {
+                    page.info?.backgroundURLs = response.backgroundURLs
+                }
+                let cached = await store.cacheArtwork(page)
+                guard !Task.isCancelled else { return }
+                guard let index = pages.firstIndex(where: { $0.id == page.id && $0.info?.url == page.info?.url }),
+                      pages[index].info?.backgroundURLs != page.info?.backgroundURLs || pages[index].cachedArtwork != cached else { continue }
+                applying = true
+                pages[index].info?.backgroundURLs = page.info?.backgroundURLs
+                pages[index].cachedArtwork = cached
+                applying = false
+                changed = true
+            }
+            if changed { persist() }
+        }
+    }
+
+    @discardableResult func open(_ urls: [URL], player: PlayerModel) -> Bool {
+        let packages = urls.filter { $0.isFileURL && $0.pathExtension.lowercased() == "verclibrary" }
+        guard !packages.isEmpty else { return false }
+        guard packages.allSatisfy({ $0.resolvingSymlinksInPath().standardizedFileURL == Library.url.resolvingSymlinksInPath().standardizedFileURL }) else {
+            error = "Only Verc Library.verclibrary in your Movies folder is supported."
+            return true
+        }
+        guard !saving else { return true }
+        player.stop()
+        player.showInfo = false
+        player.showURL = false
+        draft = nil
+        pendingDeletion = nil
+        select(nil)
+        showAllMedia = true
+        NSApp.activate(ignoringOtherApps: true)
+        return true
     }
 
     func select(_ id: UUID?) {
         let ids = [nil] + pages.map { Optional($0.id) }
         forward = (ids.firstIndex(of: id) ?? 0) > (ids.firstIndex(of: selection) ?? 0)
         selection = id
+        previewSelection = nil
+        showAllMedia = false
+    }
+
+    func remove(_ page: FavoritePage) {
+        if selection == page.id { select(nil) }
+        pages.removeAll { $0.id == page.id }
+    }
+
+    func movePage(by offset: Int) {
+        let ids = [nil] + pages.map { Optional($0.id) }
+        let next = (ids.firstIndex(of: selection) ?? 0) + offset
+        if ids.indices.contains(next) { select(ids[next]) }
+    }
+
+    func movePreview(by offset: Int) {
+        guard let page = selectedPage else { return }
+        let next = (previewSelection.flatMap { page.media.firstIndex(of: $0) } ?? 0) + offset
+        if page.media.indices.contains(next) { previewSelection = page.media[next] }
+    }
+
+    func prepareDraft(_ urls: [URL], player: PlayerModel) {
+        guard ready, !saving, !urls.isEmpty else { return }
+        Task {
+            do {
+                var pages = try await FavoritePage.drafts(for: urls)
+                guard !pages.isEmpty else { player.error = "This selection contains no supported media files."; return }
+                let existing = Set(self.pages.flatMap(\.media).map(\.standardizedFileURL))
+                for index in pages.indices { pages[index].media.removeAll { existing.contains($0.standardizedFileURL) } }
+                pages.removeAll { $0.media.isEmpty }
+                guard !pages.isEmpty else { player.error = "No files were added. All selected files are already in your library."; return }
+                draft = pages
+            } catch { player.error = "These files or folders are unavailable. Choose them from their current location." }
+        }
     }
 }
 
@@ -49,6 +279,8 @@ struct StartPage: View {
     // Trails favorites.selection by one update. A removed page keeps the transition from its last render,
     // so it must render the new direction before it leaves.
     @State private var shown: UUID?
+    @State private var tooltip: UUID?
+    @State private var sortingDots = false
 
     init(player: PlayerModel, favorites: FavoritePages) {
         self.player = player
@@ -60,173 +292,523 @@ struct StartPage: View {
         GeometryReader { geometry in
             let page = favorites.pages.first { $0.id == shown }
             ZStack {
-                PrismBackground(hidden: page != nil)
-                    .overlay(alignment: .bottom) {
-                        VStack(spacing: 16) {
-                            Text("Drop media here or double-click to open.")
-                                .font(.system(size: 15)).foregroundStyle(.secondary)
-                            if let message = player.engineError {
-                                Label(message, systemImage: "exclamationmark.circle")
-                                    .font(.system(size: 11)).foregroundStyle(.orange)
-                            }
-                        }
-                        .shadow(color: .black, radius: 3)
-                        .padding(.horizontal, 40).padding(.bottom, 104)
-                        .allowsHitTesting(false)
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture(count: 2) { player.openFiles() }
-                    .gesture(WindowDragGesture())
-                    .offset(x: page == nil ? 0 : -geometry.size.width)
-                    .accessibilityHidden(page != nil)
-                if let page {
-                    FavoriteGallery(page: page, player: player) { favorites.draft = page }
-                        .id(page.id)
-                        .transition(reduceMotion ? .opacity : .asymmetric(
-                            insertion: .move(edge: favorites.forward ? .trailing : .leading),
-                            removal: .move(edge: favorites.forward ? .leading : .trailing)
-                        ))
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
-            .overlay { PlayerContextMenu(player: player) }
-            .overlay(alignment: .bottom) {
-                HStack(spacing: 4) {
-                    ScrollViewReader { proxy in
-                        ScrollView(.horizontal) {
-                            HStack(spacing: 0) {
-                                ForEach([nil] + favorites.pages.map(Optional.some), id: \.?.id) { page in
-                                    Button { favorites.select(page?.id) } label: {
-                                        Circle().fill(.white.opacity(shown == page?.id ? 1 : 0.36))
-                                            .frame(width: 8, height: 8).frame(width: 28, height: 36)
-                                            .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel(page?.title ?? "Prism")
-                                    .accessibilityAddTraits(shown == page?.id ? [.isSelected] : [])
-                                    .help(page?.title ?? "Prism")
-                                    .contextMenu {
-                                        if let page {
-                                            Button("Edit favorite…") { favorites.draft = page }
-                                            Button("Remove favorite", role: .destructive) {
-                                                if favorites.selection == page.id { favorites.select(nil) }
-                                                favorites.pages.removeAll { $0.id == page.id }
-                                            }
-                                        }
+                ZStack {
+                    if favorites.showAllMedia {
+                        FavoriteLibrary(favorites: favorites)
+                    } else if let page {
+                        FavoriteGallery(page: page, player: player, favorites: favorites)
+                    } else {
+                        PrismBackground()
+                            .overlay(alignment: .bottom) {
+                                let bottomInset: CGFloat = favorites.pages.isEmpty ? 0 : 60
+                                let projection = PrismScene.view(aspect: geometry.size.width / max(geometry.size.height, 1), orbit: .zero).viewProjection
+                                let corner = projection * SIMD4(PrismScene.triangle[2].x, PrismScene.triangle[2].y, PrismScene.frontZ, 1)
+                                let prismBottom = geometry.size.height * (1 - corner.y / corner.w) / 2
+                                VStack(spacing: 16) {
+                                    Text("Drop media here or double-click to open.")
+                                        .font(.system(size: 15)).foregroundStyle(.secondary)
+                                    if let message = player.engineError {
+                                        Label(message, systemImage: "exclamationmark.circle")
+                                            .font(.system(size: 11)).foregroundStyle(.orange)
                                     }
                                 }
+                                .shadow(color: .black, radius: 3)
+                                .padding(.horizontal, 40)
+                                .frame(height: max(0, geometry.size.height - prismBottom - bottomInset))
+                                .padding(.bottom, bottomInset)
+                                .allowsHitTesting(false)
                             }
-                        }
-                        .scrollIndicators(.hidden)
-                        .frame(width: min(CGFloat(favorites.pages.count + 1) * 28, max(28, geometry.size.width - 320)), height: 36)
-                        .onChange(of: favorites.selection) {
-                            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.4)) { shown = favorites.selection }
-                            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { proxy.scrollTo(favorites.selection, anchor: .center) }
-                        }
+                            .contentShape(Rectangle())
+                            .onTapGesture(count: 2) { player.openFiles() }
+                            .gesture(WindowDragGesture())
                     }
-                    Rectangle().fill(.white.opacity(0.15)).frame(width: 1, height: 16).padding(.horizontal, 4)
-                    Button { favorites.draft = FavoritePage() } label: {
-                        Image(systemName: "plus").font(.system(size: 15, weight: .medium))
-                            .frame(width: 32, height: 36).contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain).help("Add Favorite Media").accessibilityLabel("Add Favorite Media")
                 }
-                .padding(.horizontal, 12).padding(.vertical, 7)
-                .glassEffect(.regular.tint(.black.opacity(0.2)), in: Capsule())
-                .padding(.bottom, 24)
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .clipped()
+                .compositingGroup()
+                .id(shown)
+                .transition(reduceMotion ? .identity : .asymmetric(
+                    insertion: .offset(x: favorites.forward ? geometry.size.width : -geometry.size.width),
+                    removal: .offset(x: favorites.forward ? -geometry.size.width : geometry.size.width)
+                ))
+                .zIndex(1)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
+            .overlay { if page == nil && !favorites.showAllMedia { PlayerContextMenu(player: player) } }
+            .overlay(alignment: .bottom) {
+                if !favorites.pages.isEmpty && !favorites.showAllMedia {
+                    HStack(spacing: 4) {
+                        FavoriteDots(favorites: favorites, shown: shown, tooltip: $tooltip, sorting: $sortingDots)
+                        Button {
+                            tooltip = nil
+                            favorites.showAllMedia = true
+                        } label: {
+                            Image(systemName: "play.square.stack.fill").font(.system(size: 15, weight: .medium))
+                                .frame(width: 32, height: 36).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain).help("Show Library").accessibilityLabel("Show Library")
+                        Rectangle().fill(.white.opacity(0.15)).frame(width: 1, height: 20).padding(.horizontal, 4)
+                        Button {
+                            let panel = NSOpenPanel()
+                            panel.title = "Choose Media Files or Folders"
+                            panel.prompt = "Choose"
+                            panel.canChooseDirectories = true
+                            panel.allowsMultipleSelection = true
+                            panel.allowedContentTypes = MediaItem.libraryTypes
+                            panel.begin { response in
+                                if response == .OK { favorites.prepareDraft(panel.urls, player: player) }
+                            }
+                        } label: {
+                            Image(systemName: "plus").font(.system(size: 15, weight: .medium))
+                                .frame(width: 32, height: 36).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain).help("Add to Library…").accessibilityLabel("Add to Library")
+                        .disabled(!favorites.ready || favorites.saving)
+                    }
+                    .padding(.horizontal, 8)
+                    .glassEffect(.regular.tint(.black.opacity(0.2)), in: Capsule())
+                    .overlay { PageScroll(favorites: favorites) }
+                    .padding(.bottom, 24)
+                }
+            }
+            .overlayPreferenceValue(PosterAnchor.self) { anchor in
+                if !favorites.showAllMedia, let anchor, let page = favorites.pages.first(where: { $0.id == tooltip }), let poster = page.info?.posterURL {
+                    GeometryReader { proxy in
+                        let dot = proxy[anchor]
+                        FavoriteArtwork(url: page.artworkURL(poster), background: true)
+                            .frame(width: 96, height: 144).clipShape(RoundedRectangle(cornerRadius: 6))
+                            .padding(6).padding(.bottom, 8)
+                            .glassEffect(.regular.tint(.black.opacity(0.2)), in: ArrowOutline(top: false, depth: 8, radius: 10))
+                            .shadow(color: .black.opacity(0.3), radius: 8)
+                            .frame(height: 0, alignment: .bottom)
+                            .position(x: dot.midX, y: dot.minY - 4)
+                            .animation(reduceMotion || sortingDots ? nil : .easeInOut(duration: 0.18), value: dot)
+                    }
+                    .allowsHitTesting(false)
+                    .transition(.identity)
+                }
             }
         }
         .background(.black)
+        .onChange(of: favorites.selection) {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.4)) { shown = favorites.selection }
+        }
+    }
+}
+
+struct PosterAnchor: PreferenceKey {
+    static var defaultValue: Anchor<CGRect>? { nil }
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) { value = nextValue() ?? value }
+}
+
+private struct PageScroll: NSViewRepresentable {
+    let favorites: FavoritePages
+
+    func makeNSView(context: Context) -> Control { Control() }
+    func updateNSView(_ view: Control, context: Context) { view.favorites = favorites }
+
+    final class Control: NSView {
+        var favorites: FavoritePages?
+        private var lastScrollTime = -Double.infinity
+        private var distance: CGFloat = 0
+        private var scrolled = false
+
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            NSApp.currentEvent?.type == .scrollWheel ? super.hitTest(point) : nil
+        }
+
+        override func scrollWheel(with event: NSEvent) {
+            guard let favorites, event.momentumPhase.isEmpty, NSEvent.pressedMouseButtons == 0 else { return }
+            if event.phase.contains(.ended) || event.phase.contains(.cancelled) {
+                distance = 0
+                scrolled = false
+                return
+            }
+            let delta = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) ? event.scrollingDeltaX : event.scrollingDeltaY
+            if event.phase.contains(.began) || event.timestamp - lastScrollTime > 0.25 || delta * distance < 0 {
+                distance = 0
+                scrolled = false
+            }
+            lastScrollTime = event.timestamp
+            if event.hasPreciseScrollingDeltas || !event.phase.isEmpty {
+                guard !scrolled else { return }
+                distance += delta
+                guard abs(distance) >= 24 else { return }
+                scrolled = true
+            } else {
+                distance = delta
+                guard distance != 0 else { return }
+            }
+            favorites.movePage(by: distance < 0 ? 1 : -1)
+        }
+    }
+}
+
+private struct FavoriteLibrary: View {
+    let favorites: FavoritePages
+    @AppStorage("libraryFilter") private var filter = ""
+    @AppStorage("librarySortByYear") private var sortByYear = false
+    @State private var search = ""
+    @State private var showOptions = false
+    @FocusState private var searchFocused: Bool
+
+    var body: some View {
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pages = favorites.pages.filter { page in
+            (filter.isEmpty || page.info?.mediaType.rawValue == filter)
+                && (query.isEmpty || page.displayTitle.localizedStandardContains(query) || page.info?.title.localizedStandardContains(query) == true
+                    || page.media.contains { $0.lastPathComponent.localizedStandardContains(query) })
+        }.sorted { lhs, rhs in
+            if sortByYear {
+                let leftYear = lhs.info?.releaseDate.flatMap { Int($0.prefix(4)) } ?? 0
+                let rightYear = rhs.info?.releaseDate.flatMap { Int($0.prefix(4)) } ?? 0
+                if leftYear != rightYear { return leftYear > rightYear }
+            }
+            return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+        }
+        VStack(spacing: 20) {
+            HStack(spacing: 16) {
+                HStack(spacing: 10) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                    TextField("Search", text: $search).textFieldStyle(.plain).focused($searchFocused)
+                    if !search.isEmpty {
+                        Button { search = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+                            .buttonStyle(.plain).help("Clear Search").accessibilityLabel("Clear Search")
+                    }
+                }
+                .padding(.horizontal, 14).padding(.vertical, 10)
+                .glassEffect(.regular, in: Capsule())
+                .frame(maxWidth: 420)
+                Text("^[\(pages.count) item](inflect: true)")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Button { showOptions.toggle() } label: {
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                        .font(.system(size: 18))
+                        .foregroundStyle(filter.isEmpty ? Color.primary : Color.accentColor)
+                        .frame(width: 36, height: 36).contentShape(Circle())
+                }
+                .buttonStyle(.plain).glassEffect(.regular.interactive(), in: Circle())
+                .help("Filter and Sort").accessibilityLabel("Filter and Sort")
+                .popover(isPresented: $showOptions, arrowEdge: .bottom) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Type").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
+                            HStack(spacing: 2) {
+                                ForEach(["", TMDBTitle.MediaType.movie.rawValue, TMDBTitle.MediaType.tv.rawValue], id: \.self) { type in
+                                    Button { filter = type } label: {
+                                        Text(type.isEmpty ? "All" : type == TMDBTitle.MediaType.movie.rawValue ? "Movies" : "TV")
+                                            .padding(.horizontal, 10).frame(height: 24).contentShape(Capsule())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .background(filter == type ? .white.opacity(0.2) : .clear, in: Capsule())
+                                    .accessibilityAddTraits(filter == type ? .isSelected : [])
+                                }
+                            }
+                            .padding(2).glassEffect(.regular, in: Capsule())
+                        }
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Sort by").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
+                            HStack(spacing: 2) {
+                                ForEach([false, true], id: \.self) { byYear in
+                                    Button { sortByYear = byYear } label: {
+                                        Text(byYear ? "Year" : "Name")
+                                            .padding(.horizontal, 10).frame(height: 24).contentShape(Capsule())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .background(sortByYear == byYear ? .white.opacity(0.2) : .clear, in: Capsule())
+                                    .accessibilityAddTraits(sortByYear == byYear ? .isSelected : [])
+                                }
+                            }
+                            .padding(2).glassEffect(.regular, in: Capsule())
+                        }
+                    }
+                    .padding(16).fixedSize().preferredColorScheme(.dark)
+                }
+            }
+            .padding(.horizontal, 40)
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 240), spacing: 20, alignment: .top)], spacing: 24) {
+                    ForEach(pages) { page in
+                        let title = page.displayTitle
+                        Button { favorites.select(page.id) } label: {
+                            VStack(alignment: .leading, spacing: 10) {
+                                ZStack {
+                                    Rectangle().fill(.white.opacity(0.06))
+                                    if let poster = page.info?.posterURL {
+                                        FavoriteArtwork(url: page.artworkURL(poster))
+                                    } else {
+                                        Image(systemName: "rectangle.stack").font(.system(size: 36, weight: .ultraLight))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                .aspectRatio(2 / 3, contentMode: .fit)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(.white.opacity(0.12), lineWidth: 0.5) }
+                                VStack(alignment: .leading, spacing: 0) {
+                                    Text(title).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                                    Group {
+                                        if let info = page.info {
+                                            Text(info.releaseDate.map { String($0.prefix(4)) } ?? "")
+                                        } else {
+                                            Text("^[\(page.media.count) file](inflect: true)")
+                                        }
+                                    }
+                                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain).accessibilityLabel("Open \(title)")
+                        .contextMenu {
+                            Button("\(page.editTitle)…") { favorites.draft = [page] }
+                            Button("Remove from Library…", role: .destructive) { favorites.pendingDeletion = page }
+                        }
+                    }
+                }
+                .padding(.horizontal, 40).padding(.bottom, 24)
+            }
+            .overlay {
+                if pages.isEmpty {
+                    if favorites.pages.isEmpty { ContentUnavailableView("Library Is Empty", systemImage: "rectangle.stack") }
+                    else if !query.isEmpty { ContentUnavailableView.search(text: query) }
+                    else { ContentUnavailableView("No items", systemImage: "info.circle") }
+                }
+            }
+        }
+        .padding(.top, 52).background(Color(white: 0.035))
+        .task { await Task.yield(); searchFocused = true }
+        .onExitCommand {
+            if showOptions { showOptions = false }
+            else { favorites.showAllMedia = false }
+        }
     }
 }
 
 private struct FavoriteGallery: View {
     let page: FavoritePage
     let player: PlayerModel
-    let edit: () -> Void
+    let favorites: FavoritePages
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var position: URL?
+    @State private var backgroundIndex = 0
 
     var body: some View {
+        let backgrounds = page.background.map { [$0] } ?? ([page.info?.backgroundURL].compactMap { $0 }
+            + (page.info?.backgroundURLs ?? []).filter { $0 != page.info?.backgroundURL }).map(page.artworkURL)
         GeometryReader { geometry in
-            let width = min(640, max(280, geometry.size.width * 0.64))
-            let height = max(72, min(420, geometry.size.height - 270))
+            let width = min(min(640, max(280, geometry.size.width * 0.64)), max(72, geometry.size.height - 200) * 16 / 9)
             ZStack {
                 Color(red: 0.035, green: 0.035, blue: 0.045)
-                if let background = page.background {
-                    FavoriteArtwork(url: background, background: true)
+                if !backgrounds.isEmpty {
+                    FavoriteArtwork(url: backgrounds[backgroundIndex % backgrounds.count], background: true, crossfade: true)
                     Color.black.opacity(0.48)
                     LinearGradient(colors: [.black.opacity(0.15), .black.opacity(0.8)], startPoint: .top, endPoint: .bottom)
                 }
-                VStack(alignment: .leading, spacing: 18) {
-                    HStack(alignment: .center) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(page.title).font(.system(size: 26, weight: .semibold)).lineLimit(1)
-                            Text("^[\(page.media.count) item](inflect: true)").font(.system(size: 12)).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Button(action: edit) { Image(systemName: "ellipsis").frame(width: 28, height: 28) }
-                            .buttonStyle(.glass).buttonBorderShape(.circle).help("Edit favorite").accessibilityLabel("Edit favorite")
+                if let info = page.info, info.mediaType == .movie, let first = page.media.first {
+                    let url = favorites.previewSelection.flatMap { page.media.contains($0) ? $0 : nil } ?? first
+                    ScrollView {
+                        FavoriteMovieDetails(page: page, info: info, item: MediaItem(url: url), player: player, favorites: favorites,
+                                             posterWidth: min(280, geometry.size.width * 0.26, max(120, (geometry.size.height - 160) * 2 / 3)))
+                            .id(url)
+                            .frame(maxWidth: 800, minHeight: max(0, geometry.size.height - 160))
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, 40)
                     }
-                    .padding(.horizontal, 40)
+                    .padding(.top, 64).padding(.bottom, 96)
+                } else {
                     ScrollView(.horizontal) {
-                        LazyHStack(alignment: .top, spacing: 24) {
+                        LazyHStack(spacing: 24) {
                             ForEach(page.media, id: \.self) { url in
                                 let item = MediaItem(url: url)
-                                Button { player.add([url]) } label: {
-                                    VStack(alignment: .leading, spacing: 14) {
-                                        FavoriteArtwork(url: url)
-                                            .frame(width: width, height: height)
-                                            .clipShape(RoundedRectangle(cornerRadius: 24))
-                                            .overlay(alignment: .bottomLeading) {
-                                                Image(systemName: item.isImage ? "photo" : "play.fill")
-                                                    .font(.system(size: 17, weight: .semibold))
-                                                    .frame(width: 44, height: 44)
-                                                    .glassEffect(.regular, in: Circle()).padding(18)
-                                            }
-                                        Text(item.title).font(.system(size: 17, weight: .semibold)).lineLimit(1).padding(.horizontal, 4)
-                                        Text(item.detail).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary).padding(.horizontal, 4)
-                                    }
-                                    .frame(width: width, alignment: .leading).contentShape(Rectangle())
+                                let title = page.title(for: url)
+                                let episode = page.info?.mediaType == .tv && item.isVideo ? MediaFilename(item.title).episode : nil
+                                FavoriteMediaCard(item: item, title: episode.map { "\($0). \(title)" } ?? title, artwork: page.artwork(for: url), player: player, width: width) {
+                                    player.add(page.media, startingAt: url, page: page)
                                 }
-                                .buttonStyle(.plain).help(url.path).accessibilityLabel("Open \(item.title)")
                             }
                         }
                         .scrollTargetLayout()
                     }
+                    .scrollPosition(id: Binding(get: { favorites.selection == page.id ? favorites.previewSelection : nil }, set: {
+                        if favorites.selection == page.id { favorites.previewSelection = $0 }
+                    }), anchor: .leading)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: favorites.previewSelection)
                     .contentMargins(.horizontal, 40, for: .scrollContent)
-                    .scrollIndicators(.hidden).scrollTargetBehavior(.viewAligned)
-                    .scrollPosition(id: $position, anchor: .leading)
+                    .scrollIndicators(.hidden)
+                    .padding(.top, 48).padding(.bottom, 74)
                 }
-                .padding(.top, 48).padding(.bottom, 88)
             }
-            .overlay(alignment: .bottomTrailing) {
-                let index = position.flatMap { page.media.firstIndex(of: $0) } ?? 0
-                HStack(spacing: 8) {
-                    Button {
-                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) { position = page.media[max(0, index - 1)] }
-                    } label: { Image(systemName: "chevron.left").frame(width: 28, height: 28) }
-                    .disabled(index == 0).accessibilityLabel("Previous media")
-                    Button {
-                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) { position = page.media[min(page.media.count - 1, index + 1)] }
-                    } label: { Image(systemName: "chevron.right").frame(width: 28, height: 28) }
-                    .disabled(index >= page.media.count - 1).accessibilityLabel("Next media")
-                }
-                .buttonStyle(.glass).buttonBorderShape(.circle)
-                .padding(.trailing, 40).padding(.bottom, 29)
+        }
+        .onChange(of: backgrounds) { backgroundIndex = 0 }
+        .task(id: scenePhase == .active ? backgrounds : []) {
+            guard scenePhase == .active, backgrounds.count > 1 else { return }
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(10)) } catch { return }
+                backgroundIndex = (backgroundIndex + 1) % backgrounds.count
             }
         }
     }
 }
 
-private struct FavoriteArtwork: View {
+private struct FavoriteMovieDetails: View {
+    let page: FavoritePage
+    let info: TMDBTitle
+    let item: MediaItem
+    let player: PlayerModel
+    let favorites: FavoritePages
+    let posterWidth: CGFloat
+    @State private var duration: Double?
+    @State private var confirmRestart = false
+    @State private var hovered = false
+
+    var body: some View {
+        let progress = player.progress[item.url]
+        HStack(alignment: .top, spacing: 32) {
+            Button {
+                if progress?.finished == true { confirmRestart = true }
+                else { player.add(page.media, startingAt: item.url, page: page) }
+            } label: {
+                FavoriteArtwork(url: info.posterURL.map(page.artworkURL) ?? item.url)
+                    .frame(width: posterWidth, height: posterWidth * 1.5)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .modifier(PlaybackBadges(item: item, progress: progress, hovered: hovered, inset: 16))
+            }
+            .buttonStyle(.plain).onHover { hovered = $0 }
+            .accessibilityLabel("Open \(page.title)")
+            .accessibilityValue(item.isImage ? "" : progress?.finished == true ? "Finished" : "\(Int((progress?.fraction ?? 0) * 100))% played")
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(page.title).font(.system(size: posterWidth < 180 ? 24 : 32, weight: .bold))
+                        .fixedSize(horizontal: false, vertical: true)
+                    let year = info.releaseDate.map { String($0.prefix(4)) }.flatMap { $0.isEmpty ? nil : $0 }
+                    Text([year, "Movie", (duration ?? progress?.duration).map(timeLabel)].compactMap { $0 }.joined(separator: " · "))
+                        .font(.system(size: 13)).foregroundStyle(.secondary)
+                }
+                Text(info.overview.isEmpty ? "No overview available." : info.overview)
+                    .font(.system(size: 14)).lineSpacing(4).foregroundStyle(.white.opacity(0.85))
+                    .fixedSize(horizontal: false, vertical: true)
+                Link(destination: info.url) {
+                    Text("TMDB \(Image(systemName: "arrow.up.right"))")
+                }
+                .font(.system(size: 12, weight: .medium)).buttonStyle(.plain)
+                if page.media.count > 1 {
+                    Picker("File", selection: Binding(get: { item.url }, set: { favorites.previewSelection = $0 })) {
+                        ForEach(page.media, id: \.self) { url in Text(url.lastPathComponent).tag(url) }
+                    }
+                    .labelsHidden().controlSize(.small)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .alert("Play Again?", isPresented: $confirmRestart) {
+            Button("Play Again") { player.add(page.media, startingAt: item.url, page: page) }
+            Button("Cancel", role: .cancel) {}
+        } message: { Text("Play “\(page.title)” from the start?") }
+        .task(id: player.engineVersion) {
+            guard !item.isImage, let engine = player.engine else { return }
+            let loaded = await engine.duration(of: item.url)
+            if !Task.isCancelled { duration = loaded }
+        }
+    }
+}
+
+private struct FavoriteMediaCard: View {
+    let item: MediaItem
+    let title: String
+    let artwork: URL?
+    let player: PlayerModel
+    let width: CGFloat
+    let open: () -> Void
+    @State private var preview: MediaPreview?
+    @State private var confirmRestart = false
+    @State private var hovered = false
+
+    var body: some View {
+        let progress = player.progress[item.url]
+        Button {
+            if progress?.finished == true { confirmRestart = true }
+            else { open() }
+        } label: {
+            VStack(alignment: .leading, spacing: 14) {
+                FavoriteArtwork(url: artwork ?? item.url, image: preview?.image,
+                                loading: artwork == nil && preview == nil && player.engineError == nil)
+                    .frame(width: width, height: width * 9 / 16)
+                    .clipShape(RoundedRectangle(cornerRadius: 24))
+                    .modifier(PlaybackBadges(item: item, progress: progress, hovered: hovered, inset: 18))
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(title).font(.system(size: 14, weight: .semibold)).lineLimit(1)
+                    if !item.isImage {
+                        Text(preview?.duration.map(timeLabel) ?? "—")
+                            .font(.system(size: 14, weight: .medium)).monospacedDigit().foregroundStyle(.gray).fixedSize()
+                    }
+                }
+                .padding(.horizontal, 4)
+            }
+            .frame(width: width, alignment: .leading).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain).accessibilityLabel("Open \(title)")
+        .onHover { hovered = $0 }
+        .accessibilityValue(item.isImage ? "" : progress?.finished == true ? "Finished" : "\(Int((progress?.fraction ?? 0) * 100))% played")
+        .alert("Play Again?", isPresented: $confirmRestart) {
+            Button("Play Again", action: open)
+            Button("Cancel", role: .cancel) {}
+        } message: { Text("Play “\(title)” from the start?") }
+        .task(id: [player.engineVersion, artwork?.absoluteString, item.url.absoluteString]) {
+            preview = nil
+            guard player.engineVersion != nil, let engine = player.engine else { return }
+            let loaded = artwork == nil
+                ? await engine.preview(of: item.url)
+                : MediaPreview(duration: await engine.duration(of: item.url))
+            if !Task.isCancelled { preview = loaded }
+        }
+    }
+}
+
+private struct PlaybackBadges: ViewModifier {
+    let item: MediaItem
+    let progress: PlaybackProgress?
+    let hovered: Bool
+    let inset: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .topLeading) {
+                if hovered, !item.isImage, let progress, progress.finished || progress.time > 0 {
+                    Text(progress.finished ? "Finished" : "Played to \(timeLabel(progress.time))")
+                        .font(.system(size: 11, weight: .medium)).monospacedDigit().foregroundStyle(.white)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .glassEffect(.regular, in: Capsule())
+                        .padding(inset)
+                }
+            }
+            .overlay(alignment: .bottomLeading) {
+                if hovered {
+                    Image(systemName: item.isImage ? "photo" : "play.fill")
+                        .font(.system(size: 17, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                        .glassEffect(.regular, in: Circle())
+                        .padding(inset)
+                }
+            }
+    }
+}
+
+struct FavoriteArtwork: View {
     let url: URL
     var background = false
-    @Environment(\.displayScale) private var displayScale
-    @State private var image: NSImage?
-    private static let cache: NSCache<NSString, NSImage> = {
-        let cache = NSCache<NSString, NSImage>()
-        cache.totalCostLimit = 96 * 1024 * 1024
+    var crossfade = false
+    var image: CGImage?
+    var loading = false
+    var symbol: String?
+    var symbolSize: CGFloat = 48
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var backgroundImage: CGImage?
+    @State private var loadingArtwork = false
+    private static var loads: [URL: Task<CGImage?, Never>] = [:]
+    private static let cache: NSCache<NSURL, CGImage> = {
+        let cache = NSCache<NSURL, CGImage>()
+        cache.totalCostLimit = 64 * 1024 * 1024
         return cache
     }()
 
@@ -234,114 +816,418 @@ private struct FavoriteArtwork: View {
         GeometryReader { geometry in
             ZStack {
                 LinearGradient(colors: [Color(white: 0.16), Color(white: 0.07)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                if let image {
-                    Image(nsImage: image).resizable().scaledToFill()
+                if let image = backgroundImage ?? image {
+                    Image(decorative: image, scale: 1).resizable().scaledToFill()
                         .frame(width: geometry.size.width, height: geometry.size.height).clipped()
+                        .id(ObjectIdentifier(image)).transition(.opacity).zIndex(1)
+                } else if loading || (loadingArtwork && !crossfade) {
+                    ProgressView().controlSize(.small).tint(.white)
                 } else if !background {
-                    Image(systemName: MediaItem(url: url).isAudio ? "music.note" : "film")
-                        .font(.system(size: 48, weight: .ultraLight)).foregroundStyle(.white.opacity(0.3))
+                    let item = MediaItem(url: url)
+                    Image(systemName: symbol ?? (item.isImage ? "photo" : item.isAudio ? "music.note" : "film"))
+                        .font(.system(size: symbolSize, weight: .ultraLight)).foregroundStyle(.white.opacity(0.3))
                 }
             }
+            .animation(crossfade && !reduceMotion ? .easeInOut(duration: 1) : nil, value: backgroundImage.map(ObjectIdentifier.init))
         }
         .accessibilityHidden(true)
         .task(id: url) {
-            image = nil
-            let key = (url.absoluteString + (background ? "#background" : "#thumbnail")) as NSString
-            if let cached = Self.cache.object(forKey: key) { image = cached; return }
-            let result: CGImage?
-            if background {
-                result = await Task.detached(priority: .utility) {
-                    guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil as CGImage? }
-                    return CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                        kCGImageSourceCreateThumbnailFromImageAlways: true,
-                        kCGImageSourceCreateThumbnailWithTransform: true,
-                        kCGImageSourceThumbnailMaxPixelSize: 2560
-                    ] as CFDictionary)
-                }.value
-            } else {
-                let request = QLThumbnailGenerator.Request(fileAt: url, size: CGSize(width: 960, height: 640), scale: displayScale, representationTypes: .thumbnail)
-                result = try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: request).cgImage
+            if !crossfade { backgroundImage = nil }
+            loadingArtwork = false
+            guard background || !url.isFileURL || url.deletingLastPathComponent().lastPathComponent == "Artwork" else { return }
+            if let cached = Self.cache.object(forKey: url as NSURL) { backgroundImage = cached; return }
+            loadingArtwork = true
+            defer { if !Task.isCancelled { loadingArtwork = false } }
+            if Self.loads[url] == nil {
+                Self.loads[url] = Task.detached(priority: .utility) {
+                    let source: CGImageSource?
+                    if url.isFileURL { source = CGImageSourceCreateWithURL(url as CFURL, nil) }
+                    else {
+                        guard let (data, response) = try? await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: 15)),
+                              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+                        source = CGImageSourceCreateWithData(data as CFData, nil)
+                    }
+                    return thumbnail(source, maxPixelSize: 2560)
+                }
             }
+            let result = await Self.loads[url]?.value
+            Self.loads[url] = nil
             guard let result else { return }
-            let loaded = NSImage(cgImage: result, size: .zero)
-            Self.cache.setObject(loaded, forKey: key, cost: result.bytesPerRow * result.height)
-            if !Task.isCancelled { image = loaded }
+            Self.cache.setObject(result, forKey: url as NSURL, cost: result.bytesPerRow * result.height)
+            if !Task.isCancelled { backgroundImage = result }
         }
     }
 }
 
 struct FavoriteEditor: View {
     let favorites: FavoritePages
-    @State var page: FavoritePage
-    @Environment(\.dismiss) private var dismiss
+    @State var pages: [FavoritePage]
+    let player: PlayerModel
+    let compact: Bool
+    @State private var loading = false
+    @State private var addingFiles = false
+    @State private var bodyHeight: CGFloat = 0
+    @State private var lookupStatus: [UUID: (message: String, retry: Bool)] = [:]
+    @State private var lookupAttempt = 0
+    @State private var resolvedInputs: [UUID: [String]] = [:]
+    @FocusState private var focused: UUID?
+    private static let tmdbLogo = Bundle.main.url(forResource: "TMDB", withExtension: "svg").flatMap { NSImage(contentsOf: $0) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Favorite Media").font(.system(size: 25, weight: .semibold))
-            TextField("Name", text: $page.title).textFieldStyle(.roundedBorder)
-            HStack {
-                Text("Media").font(.headline)
-                Spacer()
-                Button("Add files…") {
-                    let panel = NSOpenPanel()
-                    panel.title = "Choose favorite media"
-                    panel.allowsMultipleSelection = true
-                    panel.allowedContentTypes = [.audio, .movie, .image] + (MediaItem.audioExtensions.union(MediaItem.videoExtensions)).compactMap { UTType(filenameExtension: $0) }
-                    panel.begin { response in
-                        guard response == .OK else { return }
-                        for url in panel.urls where !page.media.contains(url) { page.media.append(url) }
-                    }
+        let isEditing = pages.count == 1 && favorites.pages.contains { $0.id == pages[0].id }
+        let canSave = favorites.ready && !favorites.saving && !pages.isEmpty && pages.allSatisfy { !$0.media.isEmpty && !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } && !loading && !addingFiles
+        let inset: CGFloat = compact ? 12 : 28
+        let sections = ForEach($pages) { $page in
+            VStack(alignment: .leading, spacing: compact ? 8 : 16) {
+                if page.info == nil {
+                    TextField("Name", text: $page.title)
+                        .textFieldStyle(.roundedBorder).focused($focused, equals: page.id)
+                    Text("TMDB information is optional.")
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
                 }
-                .buttonStyle(.glass)
-            }
-            ScrollView {
-                LazyVStack(spacing: 8) {
-                    ForEach(page.media, id: \.self) { url in
-                        HStack {
-                            Text(url.lastPathComponent).lineLimit(1).truncationMode(.middle)
-                            Spacer()
-                            Button { page.media.removeAll { $0 == url } } label: { Image(systemName: "xmark").frame(width: 20, height: 20) }
-                                .buttonStyle(.plain).accessibilityLabel("Remove \(url.lastPathComponent)")
+                if let status = lookupStatus[page.id] {
+                    HStack(spacing: 12) {
+                        Text(status.message).font(.system(size: 12)).foregroundStyle(.secondary)
+                        if status.retry {
+                            Button("Retry") { resolvedInputs[page.id] = nil; lookupAttempt += 1 }
+                                .controlSize(.small)
                         }
                     }
-                    if page.media.isEmpty { Text("Choose files for this gallery.").foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading) }
                 }
-                .font(.system(size: 12)).padding(12)
-            }
-            .frame(height: 116).background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Background picture").font(.system(size: 12, weight: .medium))
-                    Text(page.background?.lastPathComponent ?? "Optional").font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                if let info = page.info {
+                    HStack(alignment: .top, spacing: 12) {
+                        if let poster = info.posterURL {
+                            FavoriteArtwork(url: page.artworkURL(poster), background: true).frame(width: 52, height: 78).clipShape(RoundedRectangle(cornerRadius: 6))
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(info.title).font(.system(size: 13, weight: .semibold))
+                            Text(info.overview).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(3)
+                            Link(destination: info.url) {
+                                Text("TMDB \(Image(systemName: "arrow.up.right"))")
+                            }.font(.system(size: 10)).buttonStyle(.plain)
+                        }
+                        Spacer(minLength: 0)
+                        Button {
+                            page.clearedInfoTitle = page.title
+                            page.info = nil
+                            page.episodeTitles = nil
+                            page.episodeImages = nil
+                            lookupStatus[page.id] = nil
+                            lookupAttempt += 1
+                            focused = page.id
+                        } label: { Image(systemName: "xmark").frame(width: 20, height: 20) }
+                            .buttonBorderShape(.circle).controlSize(.mini).help("Clear TMDB Information").accessibilityLabel("Clear TMDB Information")
+                    }
+                } else if !loading && page.media.contains(where: { MediaItem(url: $0).isVideo }) {
+                    HStack {
+                        Button {
+                            page.clearedInfoTitle = nil
+                            resolvedInputs[page.id] = nil
+                            lookupAttempt += 1
+                        } label: {
+                            Label("Search TMDB", systemImage: "magnifyingglass")
+                        }
+                        Spacer()
+                        if let logo = Self.tmdbLogo {
+                            Link(destination: URL(string: "https://www.themoviedb.org/")!) {
+                                HStack(spacing: 6) {
+                                    Text("Powered by").font(.system(size: 10)).foregroundStyle(.secondary)
+                                    Image(nsImage: logo).resizable().scaledToFit().frame(width: 25, height: 18).accessibilityLabel("TMDB")
+                                }
+                            }
+                            .buttonStyle(.plain).help("Open TMDB")
+                        }
+                    }
                 }
-                Spacer()
-                if page.background != nil {
-                    Button { page.background = nil } label: { Image(systemName: "xmark") }
-                        .buttonStyle(.plain).accessibilityLabel("Remove background picture")
+                HStack {
+                    Text("Files").font(.headline)
+                    Spacer()
+                    Button("Add Files…") {
+                        let panel = NSOpenPanel()
+                        panel.title = "Choose Media Files or Folders"
+                        panel.prompt = "Add"
+                        panel.allowsMultipleSelection = true
+                        panel.canChooseDirectories = true
+                        panel.allowedContentTypes = MediaItem.libraryTypes
+                        panel.begin { response in
+                            guard response == .OK else { return }
+                            addingFiles = true
+                            Task {
+                                defer { addingFiles = false }
+                                do {
+                                    let groups = try await FavoritePage.drafts(for: panel.urls)
+                                    guard !groups.isEmpty else { player.error = "This selection contains no supported media files."; return }
+                                    var seen = Set((favorites.pages.filter { $0.id != page.id }.flatMap(\.media) + pages.flatMap(\.media)).map(\.standardizedFileURL))
+                                    let media = groups.flatMap(\.media).filter { seen.insert($0.standardizedFileURL).inserted }
+                                    guard !media.isEmpty else { player.error = "No files were added. All selected files are already in your library or this item."; return }
+                                    page.media += media
+                                } catch { player.error = "These files or folders are unavailable. Choose them from their current location." }
+                            }
+                        }
+                    }
+                    .disabled(addingFiles)
                 }
-                Button("Choose…") {
-                    let panel = NSOpenPanel()
-                    panel.title = "Choose a background picture"
-                    panel.allowedContentTypes = [.image]
-                    panel.begin { response in if response == .OK { page.background = panel.url } }
+                let files = LazyVStack(spacing: 8) {
+                    let lastEpisodes = (page.episodeTitles ?? [:]).keys.reduce(into: [Int: Int]()) { episodes, key in
+                        let numbers = key.split(separator: ":").compactMap { Int($0) }
+                        guard numbers.count == 2 else { return }
+                        episodes[numbers[0]] = max(episodes[numbers[0]] ?? 0, numbers[1])
+                    }
+                    ForEach(page.media, id: \.self) { url in
+                        FavoriteEditorRow(url: url, info: page.info, title: page.title(for: url), lastEpisodes: lastEpisodes, player: player) {
+                            page.media.removeAll { $0 == url }
+                        }
+                    }
+                    if page.media.isEmpty { Text("Add files to this library item.").foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading) }
                 }
-                .buttonStyle(.glass)
-            }
-            HStack {
-                Spacer()
-                Button("Cancel") { dismiss() }.buttonStyle(.glass).keyboardShortcut(.cancelAction)
-                Button("Save") {
-                    page.title = page.title.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if page.title.isEmpty { page.title = "Local Media" }
-                    if let index = favorites.pages.firstIndex(where: { $0.id == page.id }) { favorites.pages[index] = page }
-                    else { favorites.pages.append(page) }
-                    dismiss()
-                    favorites.select(page.id)
+                .font(.system(size: 12)).padding(.horizontal, 12)
+                let height = CGFloat(min(max(page.media.count, 1), 5)) * 30 - 8
+                ScrollView { files }
+                    .scrollBounceBehavior(.basedOnSize)
+                    .frame(idealHeight: height, maxHeight: height)
+                    .padding(.vertical, 12)
+                    .layoutPriority(-1)
+                    .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Background Image").font(.system(size: 12, weight: .medium))
+                        Text(page.background?.lastPathComponent ?? ((page.info?.backgroundURLs?.isEmpty ?? true) && page.info?.backgroundURL == nil ? "Optional" : "TMDB backdrops"))
+                            .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    Spacer()
+                    if page.background != nil {
+                        Button { page.background = nil } label: { Image(systemName: "xmark") }
+                            .buttonBorderShape(.circle).controlSize(.mini).help("Clear Custom Background").accessibilityLabel("Clear Custom Background")
+                    }
+                    Button("Choose…") {
+                        let panel = NSOpenPanel()
+                        panel.title = "Choose Background Image"
+                        panel.prompt = "Choose"
+                        panel.allowedContentTypes = [.image]
+                        panel.begin { response in if response == .OK { page.background = panel.url } }
+                    }
                 }
-                .buttonStyle(.glassProminent).keyboardShortcut(.defaultAction)
-                .disabled(page.media.isEmpty)
+                if page.id != pages.last?.id { Divider().padding(.vertical, 8) }
             }
         }
-        .padding(28).frame(width: 460)
+        let content = VStack(alignment: .leading, spacing: compact ? 8 : 20) {
+            Text(isEditing ? pages[0].editTitle : "Add to Library").font(.title2.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if favorites.saving {
+                HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Moving files to the library…") }
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+            if loading {
+                HStack(spacing: 8) { ProgressView().controlSize(.small); Text("TMDB lookup in progress…") }
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+            if isEditing {
+                sections.padding(4).layoutPriority(-1)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        sections
+                    }
+                    .padding(4)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bodyHeight = $0 }
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .contentMargins(.trailing, inset - 8, for: .scrollContent)
+                .padding(.trailing, 8 - inset)
+                .frame(idealHeight: bodyHeight, maxHeight: bodyHeight == 0 ? nil : bodyHeight)
+                .layoutPriority(-1)
+            }
+            HStack {
+                if isEditing {
+                    Button("Remove…", role: .destructive) { favorites.pendingDeletion = pages[0] }
+                        .help("Remove from Library…")
+                        .foregroundStyle(.red)
+                }
+                Spacer()
+                Button("Cancel") { favorites.draft = nil }.keyboardShortcut(.cancelAction)
+                Button(isEditing ? "Save" : "Add to Library") {
+                    guard canSave else { return }
+                    var saved = favorites.pages
+                    var seen = Set(saved.flatMap(\.media).map(\.standardizedFileURL))
+                    var added: [UUID] = []
+                    for var page in pages {
+                        page.title = page.info?.title ?? page.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                        page.clearedInfoTitle = page.info == nil ? page.title : nil
+                        if let index = saved.firstIndex(where: { $0.id == page.id }) {
+                            saved[index] = page
+                        } else {
+                            page.media.removeAll { !seen.insert($0.standardizedFileURL).inserted }
+                            guard !page.media.isEmpty else { continue }
+                            if let info = page.info, let index = saved.firstIndex(where: { $0.info?.id == info.id && $0.info?.mediaType == info.mediaType }) {
+                                var existing = saved[index]
+                                existing.media += page.media
+                                existing.media.sort { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+                                existing.episodeTitles = (existing.episodeTitles ?? [:]).merging(page.episodeTitles ?? [:]) { _, new in new }
+                                existing.episodeImages = (existing.episodeImages ?? [:]).merging(page.episodeImages ?? [:]) { _, new in new }
+                                if let background = page.background { existing.background = background }
+                                saved[index] = existing
+                                page.id = existing.id
+                            } else { saved.append(page) }
+                        }
+                        if !added.contains(page.id) { added.append(page.id) }
+                    }
+                    guard let first = added.first else { player.error = "No files were added. All selected files are already in your library."; return }
+                    Task {
+                        guard await favorites.save(saved, importing: Set(added)) else { return }
+                        var moved: [URL: URL] = [:]
+                        for page in saved {
+                            guard let updated = favorites.pages.first(where: { $0.id == page.id }) else { continue }
+                            for (source, destination) in zip(page.media, updated.media) where source != destination { moved[source] = destination }
+                        }
+                        if let current = player.current, moved[current.url] != nil { player.stop() }
+                        if !moved.isEmpty { player.saveProgress(relocating: moved) }
+                        favorites.draft = nil
+                        favorites.select(first)
+                        if added.count > 1 { favorites.showAllMedia = true }
+                    }
+                }
+                .buttonStyle(.glassProminent).keyboardShortcut(.defaultAction)
+                .disabled(!canSave)
+            }
+        }
+        .buttonStyle(.glass).buttonBorderShape(.capsule).controlSize(.large)
+        .padding(inset).frame(width: 460)
+        .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 20))
+        .glassEffect(.regular.tint(.black.opacity(0.25)), in: RoundedRectangle(cornerRadius: 20))
+        content
+        .disabled(favorites.saving)
+        .task { await Task.yield(); focused = pages.first(where: { $0.info == nil })?.id }
+        .onExitCommand { if !favorites.saving { favorites.draft = nil } }
+        .accessibilityAddTraits(.isModal)
+        .task(id: [String(lookupAttempt)] + pages.flatMap { [$0.id.uuidString] + $0.lookupKey }) {
+            loading = true
+            defer { if !Task.isCancelled { loading = false } }
+            var waited = false
+            for (index, var updated) in pages.enumerated() {
+                let id = updated.id
+                let input = updated.lookupKey
+                guard input != resolvedInputs[id], updated.clearedInfoTitle == nil,
+                      updated.info == nil || !updated.missingSeasons.isEmpty,
+                      let first = updated.media.first(where: { MediaItem(url: $0).isVideo }) else { continue }
+                lookupStatus[id] = nil
+                do {
+                    if !waited { try await Task.sleep(for: .milliseconds(400)); waited = true }
+                    if updated.info == nil {
+                        let filename = MediaFilename(first.deletingPathExtension().lastPathComponent)
+                        let name = MediaFilename(updated.title)
+                        let query = name.title.isEmpty ? filename.title : name.title
+                        guard !query.isEmpty else { continue }
+                        let year = name.year ?? filename.year
+                        let sameTitle = { (info: TMDBTitle) in info.title.compare(query, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
+                        let sameYear = { (info: TMDBTitle) in year.map { info.releaseDate?.hasPrefix(String($0)) == true } ?? true }
+                        let cached = (favorites.pages + pages).compactMap(\.info).first { info in
+                            sameTitle(info) && info.mediaType == (filename.season == nil ? .movie : .tv) && sameYear(info)
+                        }
+                        let matches: [TMDBTitle]
+                        if let cached { matches = [cached] }
+                        else { matches = try await TMDB.load(.init(query: query, type: filename.season == nil ? "multi" : "tv")).results ?? [] }
+                        try Task.checkCancellation()
+                        guard let match = matches.first(where: { sameTitle($0) && sameYear($0) }) ?? matches.first(where: sameTitle) ?? matches.first else {
+                            resolvedInputs[id] = input
+                            lookupStatus[id] = ("TMDB found no match. Check the name and search again.", false)
+                            continue
+                        }
+                        updated.info = match
+                        updated.title = match.title
+                        let existing = favorites.pages.first { $0.info?.id == match.id && $0.info?.mediaType == match.mediaType }
+                        updated.episodeTitles = existing?.episodeTitles
+                        updated.episodeImages = existing?.episodeImages
+                    }
+                    let complete = try await updated.loadEpisodes()
+                    try Task.checkCancellation()
+                    guard pages.indices.contains(index), pages[index].id == id,
+                          input == pages[index].lookupKey,
+                          pages[index].clearedInfoTitle == nil else { return }
+                    if !complete { lookupStatus[id] = ("Some episode information is unavailable. You can save without it.", true) }
+                    pages[index].info = updated.info
+                    pages[index].clearedInfoTitle = nil
+                    pages[index].episodeTitles = updated.episodeTitles
+                    pages[index].episodeImages = updated.episodeImages
+                    resolvedInputs[id] = updated.lookupKey
+                    pages[index].title = updated.title
+                } catch {
+                    if Task.isCancelled { return }
+                    resolvedInputs[id] = input
+                    lookupStatus[id] = ("TMDB information is unavailable. Try again.", true)
+                }
+            }
+        }
+    }
+}
+
+private struct FavoriteEditorRow: View {
+    let url: URL
+    let info: TMDBTitle?
+    let title: String
+    let lastEpisodes: [Int: Int]
+    let player: PlayerModel
+    let remove: () -> Void
+    @State private var details: MediaDetails?
+
+    var body: some View {
+        let item = MediaItem(url: url)
+        let isVideo = item.isVideo
+        let filename = MediaFilename(item.title)
+        let numbers = info?.mediaType == .tv && isVideo ? filename.season.flatMap { season in filename.episode.map { (season: season, episode: $0) } } : nil
+        let titleMismatch: Bool = {
+            guard let info, isVideo else { return false }
+            let titles = [filename.title, info.title].map {
+                Array($0.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+                    .filter { $0.isLetter || $0.isNumber })
+            }
+            let source = titles[0], target = titles[1]
+            guard !source.isEmpty, !target.isEmpty, source != target else { return false }
+            let tolerance = min(source.count, target.count) / 5
+            guard abs(source.count - target.count) <= tolerance,
+                  source.filter(\.isNumber) == target.filter(\.isNumber) else { return true }
+            var distances = Array(0...target.count)
+            for (i, character) in source.enumerated() {
+                var diagonal = distances[0]
+                distances[0] = i + 1
+                for (j, other) in target.enumerated() {
+                    let previous = distances[j + 1]
+                    distances[j + 1] = min(distances[j] + 1, previous + 1, diagonal + (character == other ? 0 : 1))
+                    diagonal = previous
+                }
+                if distances.min()! > tolerance { return true }
+            }
+            return distances[target.count] > tolerance
+        }()
+        let warning: String? = {
+            if let numbers, let lastEpisode = lastEpisodes[numbers.season], numbers.episode > lastEpisode {
+                return "Episode \(numbers.episode) is beyond the last episode listed on TMDB for season \(numbers.season) (episode \(lastEpisode))."
+            }
+            return titleMismatch ? "Check whether “\(url.lastPathComponent)” matches “\(info?.title ?? "")”." : nil
+        }()
+        HStack {
+            if let numbers {
+                Text(String(format: "S%02dE%02d", numbers.season, numbers.episode))
+                    .monospacedDigit().foregroundStyle(.secondary).fixedSize()
+            }
+            Text(titleMismatch ? item.title : title).lineLimit(1).truncationMode(.middle).help(url.lastPathComponent)
+            if let warning {
+                Image(systemName: "exclamationmark.triangle").foregroundStyle(.yellow)
+                    .help(warning).accessibilityLabel(warning)
+            }
+            Spacer()
+            if info != nil, isVideo {
+                if let duration = details?.duration ?? player.progress[url]?.duration {
+                    Text(timeLabel(duration)).monospacedDigit().foregroundStyle(.secondary).fixedSize()
+                }
+            }
+            Button(action: remove) { Image(systemName: "xmark").frame(width: 20, height: 20) }
+                .buttonBorderShape(.circle).controlSize(.mini).help("Remove File from This Item").accessibilityLabel("Remove \(url.lastPathComponent) from This Item")
+        }
+        .frame(height: 22)
+        .task(id: [player.engineVersion, info?.mediaType.rawValue, url.absoluteString]) {
+            guard info != nil, isVideo, details == nil, player.engineVersion != nil, let engine = player.engine else { return }
+            let loaded = await engine.details(of: url)
+            if !Task.isCancelled { details = loaded }
+        }
     }
 }

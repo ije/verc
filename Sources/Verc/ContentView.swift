@@ -12,7 +12,9 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var dropTargeted = false
+    @State private var droppedURLs: [URL]?
     @State private var controlsVisible = true
+    @State private var canvasHovered = false
     @State private var chromeHovered = false
     @State private var hideTask: Task<Void, Never>?
     @State private var trackedMenus: Set<ObjectIdentifier> = []
@@ -23,10 +25,11 @@ struct ContentView: View {
     @State private var isFullScreen = false
 
     private var playlistVisible: Bool { showPlaylist && player.playlist.count > 1 }
+    private var modal: Bool { player.showInfo || player.showURL || favorites.draft != nil }
     private var hasAudioChoice: Bool { player.audioTracks.lazy.filter { $0.id != -1 }.prefix(2).count > 1 }
     private var headerTitle: String {
-        guard let current = player.current else { return "" }
-        return (current.url.isFileURL ? current.url.lastPathComponent : current.title) + (player.speed == 1 ? "" : " · \(player.speed.formatted())×")
+        guard let current = player.current else { return favorites.showAllMedia ? "Library" : favorites.selectedPage?.displayTitle ?? "" }
+        return (current.name ?? (current.url.isFileURL ? current.url.lastPathComponent : current.title)) + (player.speed == 1 ? "" : " · \(player.speed.formatted())×")
     }
 
     private var canvas: some View {
@@ -42,7 +45,7 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: playlistVisible)
-        .background(WindowChrome(title: headerTitle, controlsVisible: controlsVisible).frame(width: 0, height: 0))
+        .background(WindowChrome(title: headerTitle.isEmpty ? "Verc" : headerTitle, controlsVisible: controlsVisible).frame(width: 0, height: 0))
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
         .tint(.primary)
@@ -72,6 +75,7 @@ struct ContentView: View {
             .opacity(controlsVisible ? 1 : 0)
             .allowsHitTesting(controlsVisible)
             if player.current?.isImage == false && !player.isPictureInPicture && !player.isPlaying && !player.isLoading && player.state != 7 {
+                let label = showPlaylist ? "Hide Playlist" : player.playLabel
                 Button {
                     if showPlaylist { showPlaylist = false }
                     else { player.togglePlay() }
@@ -83,7 +87,9 @@ struct ContentView: View {
                         .contentShape(Circle())
                         .shadow(color: .black.opacity(0.3), radius: 12, y: 2)
                 }
-                .buttonStyle(.plain).accessibilityLabel(player.state == 6 ? "Replay" : "Play")
+                .buttonStyle(.plain)
+                .help(label)
+                .accessibilityLabel(label)
                 .modifier(PlaylistMotion(distance: playlistVisible ? 296 : 0))
                 .allowsHitTesting(popup == nil)
             }
@@ -100,11 +106,27 @@ struct ContentView: View {
     private var interactiveCanvas: some View {
         canvas
         .onContinuousHover { phase in
-            if case .ended = phase { chromeHovered = false }
+            if case .active = phase { canvasHovered = true }
+            else { canvasHovered = false; chromeHovered = false }
             revealControls()
         }
+        .onChange(of: isFullScreen && !controlsVisible && canvasHovered && scenePhase == .active && trackedMenus.isEmpty) { _, hidden in
+            NSCursor.setHiddenUntilMouseMoves(hidden)
+        }
         .onChange(of: player.isPlaying) { revealControls() }
-        .onChange(of: player.current?.id) { popup = nil; revealControls() }
+        .onChange(of: player.state) {
+            guard player.state == 6, player.repeatMode == .off, player.adjacentIndex(by: 1) == nil,
+                  let url = player.current?.url, let page = favorites.pages.first(where: { $0.media.contains(url) }) else { return }
+            favorites.select(page.id)
+            player.stop()
+        }
+        .onChange(of: player.current?.id) {
+            popup = nil
+            revealControls()
+            if let url = player.current?.url, let index = favorites.pages.firstIndex(where: { $0.media.contains(url) }), index > 0 {
+                favorites.pages.move(fromOffsets: IndexSet(integer: index), toOffset: 0)
+            }
+        }
         .onChange(of: popup) { revealControls() }
         .onChange(of: scenePhase) { if scenePhase != .active && popup != .credits { popup = nil } }
         .onChange(of: player.showURL) { revealControls() }
@@ -119,7 +141,14 @@ struct ContentView: View {
             if let menu = notification.object as? NSMenu { trackedMenus.remove(ObjectIdentifier(menu)) }
             if trackedMenus.isEmpty { revealControls() }
         }
-        .onDisappear { hideTask?.cancel() }
+        .onDisappear {
+            hideTask?.cancel()
+            NSCursor.setHiddenUntilMouseMoves(false)
+        }
+    }
+
+    private var dropCanvas: some View {
+        interactiveCanvas
         .overlay {
             if dropTargeted {
                 Group {
@@ -129,7 +158,7 @@ struct ContentView: View {
                             .padding(8)
                             .ignoresSafeArea()
                     } else {
-                        HStack(spacing: 12) { DropIcon(); Text("Drop to play") }
+                        HStack(spacing: 12) { DropIcon(); Text("Drop media") }
                             .font(.title2.weight(.medium)).foregroundStyle(.white).padding(24)
                             .glassEffect(.regular.tint(.black.opacity(0.35)), in: RoundedRectangle(cornerRadius: 12))
                     }
@@ -137,28 +166,60 @@ struct ContentView: View {
                 .allowsHitTesting(false)
             }
         }
-        .dropDestination(for: URL.self) { urls, _ in player.add(urls); return !urls.isEmpty } isTargeted: { dropTargeted = $0 }
+        .dropDestination(for: URL.self) { urls, _ in
+            guard !urls.isEmpty else { return false }
+            if favorites.open(urls, player: player) { return true }
+            Task {
+                let offerPlaylist = await Task.detached(priority: .userInitiated) { () -> Bool in
+                    let files = urls.filter { $0.isFileURL && !MediaItem.subtitleExtensions.contains($0.pathExtension.lowercased()) }
+                    return files.count > 1 || files.contains { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
+                }.value
+                if offerPlaylist { droppedURLs = urls }
+                else { player.add(urls) }
+            }
+            return true
+        } isTargeted: { dropTargeted = $0 }
     }
 
     var body: some View {
-        interactiveCanvas
-        .disabled(player.showInfo || player.showURL)
-        .allowsHitTesting(!player.showInfo && !player.showURL)
-        .accessibilityHidden(player.showInfo || player.showURL)
+        dropCanvas
+        .disabled(modal)
+        .allowsHitTesting(!modal)
+        .accessibilityHidden(modal)
         .overlay {
-            if player.showInfo || player.showURL {
+            if modal {
                 ZStack {
                     Color.black.opacity(0.18).ignoresSafeArea().accessibilityHidden(true)
-                    if player.showURL { StreamDialog(player: player) }
+                    if let pages = favorites.draft {
+                        GeometryReader { geometry in
+                            let compact = geometry.size.height < 580
+                            FavoriteEditor(favorites: favorites, pages: pages, player: player, compact: compact)
+                                .id(pages.first?.id).padding(compact ? 12 : 20)
+                                .frame(width: geometry.size.width, height: geometry.size.height)
+                        }
+                        .ignoresSafeArea()
+                    } else if player.showURL { StreamDialog(player: player) }
                     else { MediaInfo(player: player) }
                 }
                 .preferredColorScheme(.dark)
             }
         }
-        .alert("Unable to complete action", isPresented: Binding<Bool>(get: { player.error != nil }, set: { if !$0 { player.error = nil } })) {
-            Button("OK") { player.error = nil }
-        } message: { Text(player.error ?? "") }
-        .sheet(item: $favorites.draft) { FavoriteEditor(favorites: favorites, page: $0).preferredColorScheme(.dark) }
+        .alert("Unable to Complete Action", isPresented: Binding<Bool>(get: { player.error != nil || favorites.error != nil }, set: { if !$0 { player.error = nil; favorites.error = nil } })) {
+            Button("OK") { player.error = nil; favorites.error = nil }
+        } message: { Text(player.error ?? favorites.error ?? "") }
+        .alert("Add to Library?", isPresented: Binding<Bool>(get: { droppedURLs != nil }, set: { if !$0 { droppedURLs = nil } }), presenting: droppedURLs) { urls in
+            Button("Add to Library…") { favorites.prepareDraft(urls, player: player) }
+            Button("Open Now") { player.add(urls) }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in Text("Add these media files to your library, or open them now.") }
+        .alert("Remove from Library?", isPresented: Binding<Bool>(get: { favorites.pendingDeletion != nil }, set: { if !$0 { favorites.pendingDeletion = nil } }), presenting: favorites.pendingDeletion) { page in
+            Button("Remove", role: .destructive) {
+                favorites.remove(page)
+                favorites.pendingDeletion = nil
+                favorites.draft = nil
+            }
+            Button("Cancel", role: .cancel) { favorites.pendingDeletion = nil }
+        } message: { page in Text("Remove “\(page.displayTitle)” from your library. Your media files will stay on disk.") }
     }
 
     private func revealControls() {
@@ -172,7 +233,13 @@ struct ContentView: View {
     }
 
     private var header: some View {
-        Text(headerTitle)
+        Group {
+            if player.current == nil, !favorites.showAllMedia, let page = favorites.selectedPage {
+                Text("\(Text(page.title))\(Text(page.seasonSuffix).foregroundStyle(.gray))")
+            } else {
+                Text(headerTitle)
+            }
+        }
         .font(.system(size: 12, weight: .medium))
         .foregroundStyle(.white.opacity(0.8))
         .lineLimit(1).truncationMode(.middle)
@@ -181,15 +248,20 @@ struct ContentView: View {
         .contentShape(Rectangle())
         .gesture(WindowDragGesture())
         .overlay(alignment: .trailing) {
-            if player.playlist.count > 1 && !showPlaylist {
-                IconButton(symbol: "list.triangle", label: "Show playlist", help: "Show playlist · ⌘L") {
+            if player.playlist.count > 1 && !showPlaylist && (player.current != nil || !favorites.showAllMedia) {
+                IconButton(symbol: "list.triangle", label: "Show Playlist", help: "Show Playlist · ⌘L") {
                     showPlaylist = true
                 }
                 .padding(.trailing, 12)
-            } else if player.current == nil && favorites.selection == nil {
-                GlassIconButton(symbol: "info", label: "About Verc", size: 18) {
+            } else if player.current == nil, !favorites.showAllMedia, let page = favorites.selectedPage {
+                GlassIconButton(symbol: "info", label: page.editTitle, help: "\(page.editTitle)… · ⌘I", size: 18) { favorites.draft = [page] }
+                .keyboardShortcut("i")
+                .padding(.trailing, 7)
+            } else if player.current == nil && !favorites.showAllMedia && favorites.selection == nil {
+                GlassIconButton(symbol: "info", label: "Credits", help: "Credits · ⌘I", size: 18) {
                     popup = popup == .credits ? nil : .credits
                 }
+                .keyboardShortcut("i")
                 .background {
                     CreditsPopover(isPresented: Binding(get: { popup == .credits }, set: {
                         if $0 { popup = .credits }
@@ -210,11 +282,14 @@ struct ContentView: View {
     private var playlistSidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Label("Playlist", systemImage: "list.triangle").font(.system(size: 13, weight: .semibold))
+                Label(player.playlistTitle ?? "Playlist", systemImage: "list.triangle")
+                    .font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                    .help(player.playlistTitle ?? "Playlist")
                 Text(player.playlist.count.formatted()).font(.system(size: 11)).foregroundStyle(.secondary)
                     .padding(.horizontal, 6).frame(minWidth: 20, minHeight: 20)
                     .background(.primary.opacity(0.08), in: Capsule())
                     .overlay { Capsule().strokeBorder(.primary.opacity(0.15), lineWidth: 0.5) }
+                    .fixedSize()
                 Spacer()
                 Button {
                     player.repeatMode = switch player.repeatMode {
@@ -243,9 +318,22 @@ struct ContentView: View {
                                 showPlaylist = false
                             } label: {
                                 HStack(spacing: 12) {
-                                    Image(systemName: playing ? "play.fill" : item.isImage ? "photo" : item.isAudio ? "music.note" : "film")
-                                        .font(.system(size: 16)).frame(width: 22)
-                                        .foregroundStyle(playing ? Color.white : .secondary)
+                                    if let artwork = item.artwork {
+                                        FavoriteArtwork(url: artwork, symbol: "film", symbolSize: 16)
+                                            .frame(width: 56, height: 32)
+                                            .clipShape(RoundedRectangle(cornerRadius: 5))
+                                            .overlay {
+                                                if playing {
+                                                    Image(systemName: "play.fill").font(.system(size: 12))
+                                                        .foregroundStyle(.white).padding(6)
+                                                        .background(.black.opacity(0.6), in: Circle())
+                                                }
+                                            }
+                                    } else {
+                                        Image(systemName: playing ? "play.fill" : item.isImage ? "photo" : item.isAudio ? "music.note" : "film")
+                                            .font(.system(size: 16)).frame(width: 22)
+                                            .foregroundStyle(playing ? Color.white : .secondary)
+                                    }
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(item.title).font(.system(size: 12, weight: .medium))
                                             .lineLimit(1).truncationMode(.tail)
@@ -304,8 +392,8 @@ struct ContentView: View {
             if player.isPictureInPicture {
                 VStack(spacing: 16) {
                     Image(systemName: "pip").font(.system(size: 36, weight: .light))
-                    Text("Playing in Picture in Picture").font(.system(size: 14))
-                    Button("Return to window") { player.endPictureInPicture() }.buttonStyle(.plain)
+                    Text("Video is in Picture in Picture").font(.system(size: 14))
+                    Button("Exit Picture in Picture") { player.endPictureInPicture() }.buttonStyle(.plain)
                 }.foregroundStyle(.white.opacity(0.7))
             } else if player.current?.isAudio == true || (!player.isLoading && player.videoWidth == 0 && !player.audioTracks.isEmpty) {
                 VStack(spacing: 20) {
@@ -318,8 +406,8 @@ struct ContentView: View {
             if player.state == 7 {
                 VStack(spacing: 12) {
                     Image(systemName: "exclamationmark.triangle").font(.largeTitle)
-                    Text("Couldn’t play this media.").font(.headline)
-                    Button("Open another file") { player.openFiles() }.buttonStyle(.bordered)
+                    Text("Verc cannot play this media.").font(.headline)
+                    Button("Open Another File…") { player.openFiles() }.buttonStyle(.bordered)
                 }.foregroundStyle(.white)
             }
         }
@@ -342,7 +430,7 @@ struct ContentView: View {
             Button { popup = popup == .volume ? nil : .volume } label: {
                 Image(systemName: player.muted || player.volume == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill").font(.system(size: 15)).frame(width: 28, height: 32)
             }
-            .buttonStyle(.plain).help("Volume · M to mute").accessibilityLabel("Volume settings")
+            .buttonStyle(.plain).help(player.muted ? "Volume · M to Unmute" : "Volume · M to Mute").accessibilityLabel("Volume")
             .popover(isPresented: Binding(get: { popup == .volume }, set: {
                 if $0 { popup = .volume }
                 else if popup == .volume { popup = nil }
@@ -353,7 +441,7 @@ struct ContentView: View {
                 Image(systemName: "captions.bubble").font(.system(size: 16)).frame(width: 28, height: 32)
                     .foregroundStyle(player.subtitleID == -1 ? .gray : .white.opacity(0.9))
             }
-            .buttonStyle(.plain).help("Subtitles and audio tracks").accessibilityLabel("Subtitles and audio tracks")
+            .buttonStyle(.plain).help("Subtitles and Audio Tracks").accessibilityLabel("Subtitles and Audio Tracks")
             .popover(isPresented: Binding(get: { popup == .tracks }, set: {
                 if $0 { popup = .tracks }
                 else if popup == .tracks { popup = nil }
@@ -361,9 +449,9 @@ struct ContentView: View {
                 tracksPopover.preferredColorScheme(.dark).fixedSize()
             }
             Timeline(player: player, scrubbing: $scrubbing, editingChanged: revealControls)
-            IconButton(symbol: player.isPictureInPicture ? "pip.exit" : "pip.enter", label: player.isPictureInPicture ? "Exit Picture in Picture" : "Picture in Picture", active: player.isPictureInPicture) { player.togglePictureInPicture() }
+            IconButton(symbol: player.isPictureInPicture ? "pip.exit" : "pip.enter", label: player.pictureInPictureLabel, active: player.isPictureInPicture) { player.togglePictureInPicture() }
                 .disabled(!player.canPictureInPicture)
-            IconButton(symbol: isFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right", label: isFullScreen ? "Exit Full Screen · 🌐︎F" : "Enter Full Screen · 🌐︎F") { NSApp.keyWindow?.toggleFullScreen(nil) }
+            IconButton(symbol: isFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right", label: isFullScreen ? "Exit Full Screen" : "Enter Full Screen", help: isFullScreen ? "Exit Full Screen · 🌐︎F" : "Enter Full Screen · 🌐︎F") { NSApp.keyWindow?.toggleFullScreen(nil) }
         }
         .font(.system(size: 11, weight: .medium, design: .monospaced)).monospacedDigit()
         .foregroundStyle(.white.opacity(0.9))
@@ -377,7 +465,7 @@ struct ContentView: View {
         VStack(spacing: 12) {
             Text("\(Int(player.volume * 100))%").font(.system(size: 10, design: .monospaced)).foregroundStyle(.white)
             VolumeSlider(value: $player.volume).frame(width: 32, height: 132)
-            IconButton(symbol: player.muted ? "speaker.slash.fill" : "speaker.wave.2.fill", label: "Mute", active: player.muted) { player.muted.toggle() }
+            IconButton(symbol: player.muted ? "speaker.slash.fill" : "speaker.wave.2.fill", label: player.muted ? "Unmute" : "Mute", active: player.muted) { player.muted.toggle() }
         }.padding(.vertical, 18).padding(.horizontal, 12)
     }
 
@@ -413,17 +501,23 @@ struct ContentView: View {
             HStack(spacing: 8) {
                 Text("Subtitles").font(.system(size: 11)).foregroundStyle(.secondary)
                 Spacer(minLength: 0)
-                GlassIconButton(symbol: "plus", label: "Add subtitles", help: "Add subtitles…") { popup = nil; player.openFiles(subtitles: true) }
+                GlassIconButton(symbol: "plus", label: "Add Subtitles", help: "Add Subtitles…") { popup = nil; player.openFiles(subtitles: true) }
             }
             if !subtitles.isEmpty {
                 HStack(spacing: 8) {
                     Text("Track").frame(width: 64, alignment: .leading)
-                    Picker("Track", selection: Binding(get: { player.subtitleID }, set: {
+                    Picker("Subtitle Track", selection: Binding(get: { player.subtitleID }, set: {
                         player.subtitleID = $0
                         player.send(.track($0, true))
                     })) {
                         Text("Off").tag(Int32(-1))
-                        ForEach(subtitles) { Text($0.name).tag($0.id) }
+                        ForEach(subtitles) { track in
+                            if track.isExternal {
+                                Text("\(track.name) \(Text("\(Image(systemName: "text.document"))\(track.format.map { " \($0.uppercased())" } ?? "")").foregroundStyle(.gray))").tag(track.id)
+                            } else {
+                                Text(track.name).tag(track.id)
+                            }
+                        }
                     }
                     .labelsHidden().buttonSizing(.flexible).frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -436,7 +530,7 @@ struct ContentView: View {
                         .labelsHidden().buttonSizing(.flexible).frame(maxWidth: .infinity, alignment: .leading)
                     }
                     HStack(spacing: 8) {
-                        Text("Font size").frame(width: 64, alignment: .leading)
+                        Text("Font Size").frame(width: 64, alignment: .leading)
                         SubtitleSlider(value: $player.subtitleFontSize, range: 16...100)
                             .accessibilityLabel("Subtitle Font Size")
                             .accessibilityValue("\(Int(player.subtitleFontSize)) points")
@@ -444,9 +538,9 @@ struct ContentView: View {
                             .monospacedDigit().foregroundStyle(.secondary).frame(width: 40, alignment: .trailing)
                     }
                     HStack(spacing: 8) {
-                        Text("Y position").frame(width: 64, alignment: .leading)
+                        Text("Position").frame(width: 64, alignment: .leading)
                         SubtitleSlider(value: $player.subtitleBottomInset, range: 0...420)
-                            .accessibilityLabel("Subtitle Y Position")
+                            .accessibilityLabel("Subtitle Distance from Bottom")
                             .accessibilityValue("\(Int(player.subtitleBottomInset)) points from the bottom")
                         Text("\(Int(player.subtitleBottomInset)) pt")
                             .monospacedDigit().foregroundStyle(.secondary).frame(width: 40, alignment: .trailing)
@@ -456,7 +550,7 @@ struct ContentView: View {
             if hasAudioChoice {
                 Divider()
                 Text("Audio").font(.system(size: 11)).foregroundStyle(.secondary)
-                Picker("Track", selection: Binding(get: { player.audioID }, set: {
+                Picker("Audio Track", selection: Binding(get: { player.audioID }, set: {
                     player.audioID = $0
                     player.send(.track($0, false))
                 })) {
@@ -544,7 +638,7 @@ private struct Timeline: View {
     var body: some View {
         HStack(spacing: 12) {
             Text(timeLabel(scrubbing ? scrubTime : player.time)).frame(minWidth: 38, alignment: .trailing)
-            SeekSlider(value: Binding(get: { scrubbing ? scrubTime : min(player.time, max(player.duration, 1)) }, set: {
+            SeekSlider(value: Binding(get: { scrubbing ? scrubTime : player.duration > 0 ? min(player.time, player.duration) : 0 }, set: {
                 scrubTime = $0
                 if !scrubbing { player.seek(to: $0) }
             }), duration: max(player.duration, 1), enabled: player.seekable) { editing in
@@ -554,7 +648,7 @@ private struct Timeline: View {
                 editingChanged()
             }
             .frame(height: 16)
-            Text(player.duration > 0 ? timeLabel(player.duration) : "LIVE")
+            Text(player.duration > 0 ? timeLabel(player.duration) : "—")
                 .frame(minWidth: 44, alignment: .leading)
         }
     }
@@ -578,7 +672,7 @@ private struct CreditsPopover<Content: View>: NSViewRepresentable {
         let anchor = window.convertToScreen(view.convert(view.bounds, to: nil))
         let size = NSHostingView(rootView: content).fittingSize
         let x = min(max(anchor.midX - size.width / 2, screen.visibleFrame.minX + 8), screen.visibleFrame.maxX - size.width - 8)
-        let outline = CreditsOutline(arrowX: min(max(anchor.midX - x, 30), size.width - 30))
+        let outline = ArrowOutline(arrowX: min(max(anchor.midX - x, 30), size.width - 30))
         let host = NSHostingView(rootView: content
             .foregroundStyle(.white)
             .padding(.top, 12)
@@ -646,16 +740,22 @@ private final class CreditsPanel: NSPanel {
     override var canBecomeKey: Bool { true }
 }
 
-private struct CreditsOutline: Shape {
-    let arrowX: CGFloat
+struct ArrowOutline: Shape {
+    var arrowX: CGFloat?
+    var top = true
+    var depth: CGFloat = 12
+    var radius: CGFloat = 16
 
     func path(in rect: CGRect) -> Path {
-        let body = Path(roundedRect: CGRect(x: rect.minX, y: rect.minY + 12, width: rect.width, height: rect.height - 12), cornerRadius: 16)
+        let x = rect.minX + (arrowX ?? rect.width / 2)
+        let y = { (inset: CGFloat) in top ? rect.minY + inset : rect.maxY - inset }
+        let width = depth * 7 / 6, tip = depth / 6
+        let body = Path(roundedRect: CGRect(x: rect.minX, y: top ? rect.minY + depth : rect.minY, width: rect.width, height: rect.height - depth), cornerRadius: radius)
         let arrow = Path { path in
-            path.move(to: CGPoint(x: rect.minX + arrowX - 14, y: rect.minY + 16))
-            path.addLine(to: CGPoint(x: rect.minX + arrowX - 2, y: rect.minY + 2))
-            path.addQuadCurve(to: CGPoint(x: rect.minX + arrowX + 2, y: rect.minY + 2), control: CGPoint(x: rect.minX + arrowX, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.minX + arrowX + 14, y: rect.minY + 16))
+            path.move(to: CGPoint(x: x - width, y: y(depth * 4 / 3)))
+            path.addLine(to: CGPoint(x: x - tip, y: y(tip)))
+            path.addQuadCurve(to: CGPoint(x: x + tip, y: y(tip)), control: CGPoint(x: x, y: y(0)))
+            path.addLine(to: CGPoint(x: x + width, y: y(depth * 4 / 3)))
             path.closeSubpath()
         }
         return body.union(arrow)
@@ -786,11 +886,12 @@ struct StreamDialog: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Open stream").font(.system(size: 25, weight: .semibold)).tracking(-0.8)
+            Text("Open URL").font(.system(size: 25, weight: .semibold)).tracking(-0.8)
             Text("Enter a direct media URL.").font(.system(size: 12)).foregroundStyle(.secondary)
             TextField("https://example.com/video.mp4", text: $address).textFieldStyle(.roundedBorder).focused($focused)
+                .accessibilityLabel("Media URL")
             HStack {
-                Text("Verc does not save stream URLs.").font(.system(size: 10)).foregroundStyle(Theme.muted)
+                Text("Stream URLs can appear in saved playback progress.").font(.system(size: 10)).foregroundStyle(Theme.muted)
                 Spacer()
                 Button("Cancel") { player.showURL = false }.buttonStyle(.glass).keyboardShortcut(.cancelAction)
                 Button("Open") { if let url { player.add([url]); player.showURL = false } }.buttonStyle(.glassProminent).keyboardShortcut(.defaultAction).disabled(url == nil)
@@ -810,13 +911,13 @@ struct MediaInfo: View {
     var body: some View {
         let ratio = player.videoRatio
         return VStack(alignment: .leading, spacing: 20) {
-            Text("Media information").font(.title2.weight(.semibold))
+            Text("Media Information").font(.title2.weight(.semibold))
             Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 12) {
                 GridRow { Text("Name").foregroundStyle(.secondary); Text(player.current?.title ?? "No media").lineLimit(2) }
-                GridRow { Text("Format").foregroundStyle(.secondary); Text(player.current?.detail ?? "—") }
-                GridRow { Text("Duration").foregroundStyle(.secondary); Text(timeLabel(player.duration)) }
+                GridRow { Text(player.current?.url.isFileURL == true ? "File Type" : "Source").foregroundStyle(.secondary); Text(player.current?.detail ?? "—") }
+                GridRow { Text("Duration").foregroundStyle(.secondary); Text(player.duration > 0 ? timeLabel(player.duration) : "—") }
                 GridRow { Text("Resolution").foregroundStyle(.secondary); Text(verbatim: player.videoWidth > 0 ? "\(player.videoWidth) × \(player.videoHeight)" : "—") }
-                GridRow { Text("Frame ratio").foregroundStyle(.secondary); Text(verbatim: ratio.height > 0 ? "\(Int(ratio.width)):\(Int(ratio.height))" : "—") }
+                GridRow { Text("Aspect Ratio").foregroundStyle(.secondary); Text(verbatim: ratio.height > 0 ? "\(Int(ratio.width)):\(Int(ratio.height))" : "—") }
             }.font(.system(size: 12)).textSelection(.enabled)
             HStack { Spacer(); Button("Done") { player.showInfo = false }.buttonStyle(.glass).keyboardShortcut(.defaultAction) }
         }

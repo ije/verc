@@ -20,6 +20,7 @@ Verc is a media player for Apple silicon and macOS 26+. It uses Swift 6, SwiftUI
 - `Sources/VLC/`: C bridge and subtitle plugin. Public headers are in `include/`.
 - `Resources/Info.plist`: app metadata and file extensions that `MediaItem` reads.
 - `scripts/build.sh` and `scripts/vlc-plugins.json`: app bundle assembly and VLC plugin selection.
+- `Website/`: Cloudflare Worker for TMDB search and episode data.
 
 ## Code constraints
 
@@ -32,13 +33,14 @@ Verc is a media player for Apple silicon and macOS 26+. It uses Swift 6, SwiftUI
 - Keep the C bridge compatible with the bundled VLC runtime. Do not unload VLC libraries after successful initialization.
 - Keep `Vendor/VLC/include/` consistent with the VLC version in the build script.
 - Load app resources from `Bundle.main`, and copy them into `Contents/Resources` in the build script. Do not use SwiftPM resources or `Bundle.module`.
+- Use Liquid Glass for UI.
 - Keep Swift GPU buffer layouts identical to their Metal structs.
 - Reuse GPU resources. Preserve animation suspension for hidden or inactive windows and support for Reduce Motion.
 - Preserve third-party notices. Refer to `NOTICE` for distribution requirements.
 - Do not commit generated files from `.build/` or `dist/`.
 - Do not update readme unless the user ask for.
 
-## Build and checks
+## macOS build and checks
 
 Use Xcode 26+ and the Metal Toolchain on an Apple silicon Mac. Install the toolchain with `xcodebuild -downloadComponent MetalToolchain`. Run commands from the repository root.
 
@@ -53,5 +55,34 @@ The app needs the bundled VLC runtime and resources. A plain `swift build` does 
 For release or bundle changes, run `./scripts/build.sh`.
 The script checks ARM64 libraries, bundled dependencies, and the app signature. Release builds also enforce a 50 MiB limit.
 
-There is no automated test target. After code changes, build the app and do manual checks for the affected behavior.
+The macOS app has no automated test target. After app code changes, build the app and do manual checks for the affected behavior.
 For documentation-only changes, check the diff and referenced paths. No app build is necessary.
+
+## Website
+
+`Website/` uses JavaScript ES modules and Cloudflare Workers.
+
+- `worker.js`: the `POST /tmdb` endpoint, request validation, TMDB requests, and response cache.
+- `cloudflare.config.ts`: Worker name, entrypoint, compatibility date, and the `verc.download` custom domain. The Cache API does not work on `workers.dev`.
+- `package.json`: commands that use the `cf` CLI and Node.js test runner. `cf` builds with the `wrangler` dev dependency.
+- `.env.example`: local environment variables. The Worker uses `TMDB_API_READ_ACCESS_TOKEN` for authentication.
+
+- Use four-space indentation and the current JavaScript style.
+- Keep response fields compatible with `Sources/Verc/TMDB.swift`.
+- Keep TMDB credentials in the Worker environment. Do not include secrets in source files, responses, or logs.
+- Preserve request validation, the 4096-byte body limit, CORS headers, and the eight-second timeout for TMDB requests.
+- Cache successful responses for one hour. Keep cache keys separate for each search or episode request.
+- Preserve the `Retry-After` header on TMDB rate-limit errors. Do not cache error responses.
+- Do not commit local `.env` files or generated `.cloudflare/` files.
+
+Run commands from `Website/`. The scripts require the `cf` CLI on `PATH`.
+
+```sh
+npm install
+npm run dev
+npm run build
+npm test
+```
+
+No test files exist yet. After Worker changes, check search, episode lookup, invalid requests, CORS, cache behavior, and upstream errors.
+Use `npm run deploy` to deploy the Worker when the task requires deployment.

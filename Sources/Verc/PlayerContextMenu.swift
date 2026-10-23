@@ -44,25 +44,34 @@ final class PlayerMenuView: NSView {
             }
             items += [
                 PlayerMenuItem("Subtitles", children: subtitleItems),
-                PlayerMenuItem("Save Current Frame", enabled: player.canSaveFrame) { player.saveFrame() },
                 .separator(),
-                PlayerMenuItem("Stop") { player.stop() },
-                PlayerMenuItem(player.isPlaying ? "Pause" : "Play") { player.togglePlay() },
-                PlayerMenuItem("Video size", children: [
-                    PlayerMenuItem("Fill window", checked: player.fillVideo) { player.fillVideo = true },
-                    PlayerMenuItem("Fit entire video", checked: !player.fillVideo) { player.fillVideo = false }
+                PlayerMenuItem(player.playLabel) { player.togglePlay() },
+                PlayerMenuItem("Stop") { player.stop() }
+            ]
+            if player.playlist.count > 1, player.playlist.contains(where: { $0.id == player.current?.id }) {
+                items += [
+                    PlayerMenuItem("Previous Item", enabled: player.adjacentIndex(by: -1) != nil) { player.playAdjacent(by: -1) },
+                    PlayerMenuItem("Next Item", enabled: player.adjacentIndex(by: 1) != nil) { player.playAdjacent(by: 1) }
+                ]
+            }
+            items += [
+                .separator(),
+                PlayerMenuItem("Video Size", children: [
+                    PlayerMenuItem("Fill Window", checked: player.fillVideo) { player.fillVideo = true },
+                    PlayerMenuItem("Fit Entire Video", checked: !player.fillVideo) { player.fillVideo = false }
                 ]),
-                PlayerMenuItem("Playback speed", children: [Float(0.5), 0.75, 1, 1.25, 1.5, 2].map { speed in
+                PlayerMenuItem("Playback Speed", children: [Float(0.5), 0.75, 1, 1.25, 1.5, 2].map { speed in
                     PlayerMenuItem("\(speed.formatted())×", checked: player.speed == speed) { player.speed = speed }
                 }),
                 PlayerMenuItem("Repeat", children: RepeatMode.allCases.map { mode in
                     PlayerMenuItem(mode.rawValue, checked: player.repeatMode == mode) { player.repeatMode = mode }
                 }),
                 .separator(),
-                PlayerMenuItem(player.isPictureInPicture ? "Exit Picture in Picture" : "Picture in Picture", enabled: player.canPictureInPicture) {
+                PlayerMenuItem("Save Current Frame", enabled: player.canSaveFrame) { player.saveFrame() },
+                PlayerMenuItem(player.pictureInPictureLabel, enabled: player.canPictureInPicture) {
                     player.togglePictureInPicture()
                 },
-                PlayerMenuItem("Full Screen") { [weak window] in window?.toggleFullScreen(nil) },
+                PlayerMenuItem(window?.styleMask.contains(.fullScreen) == true ? "Exit Full Screen" : "Enter Full Screen") { [weak window] in window?.toggleFullScreen(nil) },
                 .separator(),
                 PlayerMenuItem("Media Information") { player.showInfo = true }
             ]

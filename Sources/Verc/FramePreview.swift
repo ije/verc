@@ -97,7 +97,7 @@ private struct FrameThumbnail: View {
         }
         .buttonStyle(.plain)
         .help("Saved to \(url.deletingLastPathComponent().lastPathComponent) · Click to open, drag to share, or swipe right to dismiss")
-        .accessibilityLabel("Open saved frame")
+        .accessibilityLabel("Open Saved Frame")
         .draggable(SavedFrame(url: url))
         .dragConfiguration(.init(allowMove: false))
         .onDragSessionUpdated { session in

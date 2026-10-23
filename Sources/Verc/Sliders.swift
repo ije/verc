@@ -31,7 +31,7 @@ struct SeekSlider: NSViewRepresentable {
         slider.isContinuous = true
         slider.controlSize = .mini
         slider.trackFillColor = .white
-        slider.setAccessibilityLabel("Playback position")
+        slider.setAccessibilityLabel("Playback Position")
         return slider
     }
 
