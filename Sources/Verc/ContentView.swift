@@ -22,7 +22,6 @@ struct ContentView: View {
     @State private var popup: PlayerPopup?
     @State private var playlistSelection: UUID?
     @FocusState private var playlistFocused: Bool
-    @State private var isFullScreen = false
 
     private var playlistVisible: Bool { showPlaylist && player.playlist.count > 1 }
     private var modal: Bool { player.showInfo || player.showURL || player.showIconPicker || favorites.draft != nil }
@@ -112,7 +111,7 @@ struct ContentView: View {
             else { canvasHovered = false; chromeHovered = false }
             revealControls()
         }
-        .onChange(of: isFullScreen && !controlsVisible && canvasHovered && scenePhase == .active && trackedMenus.isEmpty) { _, hidden in
+        .onChange(of: player.isFullScreen && !controlsVisible && canvasHovered && scenePhase == .active && trackedMenus.isEmpty) { _, hidden in
             NSCursor.setHiddenUntilMouseMoves(hidden)
         }
         .onChange(of: player.isPlaying) { revealControls() }
@@ -134,8 +133,8 @@ struct ContentView: View {
         .onChange(of: player.showURL) { revealControls() }
         .onChange(of: player.showInfo) { revealControls() }
         .onChange(of: player.showIconPicker) { popup = nil; revealControls() }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in isFullScreen = true }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in isFullScreen = false }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in player.isFullScreen = true }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in player.isFullScreen = false }
         .onReceive(NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)) { notification in
             if let menu = notification.object as? NSMenu { trackedMenus.insert(ObjectIdentifier(menu)) }
             hideTask?.cancel()
@@ -456,7 +455,7 @@ struct ContentView: View {
             Timeline(player: player, scrubbing: $scrubbing, editingChanged: revealControls)
             IconButton(symbol: player.isPictureInPicture ? "pip.exit" : "pip.enter", label: player.pictureInPictureLabel, active: player.isPictureInPicture) { player.togglePictureInPicture() }
                 .disabled(!player.canPictureInPicture)
-            IconButton(symbol: isFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right", label: isFullScreen ? "Exit Full Screen" : "Enter Full Screen", help: isFullScreen ? "Exit Full Screen · 🌐︎F" : "Enter Full Screen · 🌐︎F") { NSApp.keyWindow?.toggleFullScreen(nil) }
+            IconButton(symbol: player.isFullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right", label: player.isFullScreen ? "Exit Full Screen" : "Enter Full Screen", help: player.isFullScreen ? "Exit Full Screen · 🌐︎F" : "Enter Full Screen · 🌐︎F") { NSApp.keyWindow?.toggleFullScreen(nil) }
         }
         .font(.system(size: 11, weight: .medium, design: .monospaced)).monospacedDigit()
         .foregroundStyle(.white.opacity(0.9))

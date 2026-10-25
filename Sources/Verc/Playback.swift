@@ -527,6 +527,9 @@ final class VLC: @unchecked Sendable {
             updateCrop()
         }
     }
+    var isFullScreen = false {
+        didSet { if isFullScreen != oldValue { fillVideo = !isFullScreen } }
+    }
     var viewport = CGSize.zero { didSet { updateCrop() } }
     var showURL = false
     var showIconPicker = false
@@ -978,6 +981,7 @@ final class VLC: @unchecked Sendable {
     private func updateCrop() {
         guard viewport.width > 0, viewport.height > 0 else { return }
         send(.crop(fillVideo && !isPictureInPicture ? "\(Int(viewport.width.rounded())):\(Int(viewport.height.rounded()))" : nil))
+        (videoView.superview as? SubtitleSurface)?.updateSubtitleLayout()
     }
 
     func stop() {

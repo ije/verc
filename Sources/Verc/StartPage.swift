@@ -741,7 +741,7 @@ private struct FavoriteDetails: View {
                                     GridRow {
                                         Text(credit.role).foregroundStyle(.secondary).fixedSize()
                                         ViewThatFits(in: .horizontal) {
-                                            ForEach((0...credit.names.count).reversed(), id: \.self) { count in
+                                            ForEach((0...min(3, credit.names.count)).reversed(), id: \.self) { count in
                                                 HStack(spacing: 6) {
                                                     if count > 0 {
                                                         Text(credit.names.prefix(count).joined(separator: ", "))
