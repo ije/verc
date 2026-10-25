@@ -16,6 +16,7 @@ struct FavoritePage: Identifiable, Codable, Sendable {
     var episodeImages: [String: URL]?
     var directory: String?
     var cachedArtwork: [String: String]?
+    var libraryURL: URL?
 
     var artworkURLs: Set<URL> {
         Set(([info?.posterURL, info?.backgroundURL].compactMap { $0 }
@@ -23,8 +24,8 @@ struct FavoritePage: Identifiable, Codable, Sendable {
     }
 
     func artworkURL(_ url: URL) -> URL {
-        guard let directory, let name = cachedArtwork?[url.absoluteString] else { return url }
-        return Library.url.appendingPathComponent(directory, isDirectory: true).appendingPathComponent("Artwork", isDirectory: true).appendingPathComponent(name)
+        guard let libraryURL, let directory, let name = cachedArtwork?[url.absoluteString] else { return url }
+        return libraryURL.appendingPathComponent(directory, isDirectory: true).appendingPathComponent("Artwork", isDirectory: true).appendingPathComponent(name)
     }
 
     var editTitle: String { info?.mediaType == .tv ? "Edit TV Show" : info?.mediaType == .movie ? "Edit Movie" : "Edit Media" }
@@ -126,12 +127,16 @@ struct FavoritePage: Identifiable, Codable, Sendable {
     var pages: [FavoritePage] = [] {
         didSet { if ready && !applying { persist() } }
     }
-    private let store = LibraryStore()
+    private var store: LibraryStore?
+    private var loadTask: Task<Void, Never>?
+    private var draftTask: Task<Void, Never>?
     private var persistence: Task<Void, Never>?
     private var artworkTask: Task<Void, Never>?
     private var applying = false
     private var queued = false
-    private(set) var ready = false
+    private(set) var url: URL?
+    private(set) var opening = false
+    var ready: Bool { store != nil && !opening }
     private(set) var saving = false
     var error: String?
     private(set) var selection: UUID?
@@ -142,17 +147,45 @@ struct FavoritePage: Identifiable, Codable, Sendable {
     var pendingDeletion: FavoritePage?
     var selectedPage: FavoritePage? { pages.first { $0.id == selection } }
 
-    func load() async {
-        do {
-            pages = try await store.load()
-            ready = true
+    func load(_ url: URL, create: Bool = false) {
+        guard !saving else { error = "Wait for the files to finish importing before opening another library."; return }
+        let previousLoad = loadTask
+        previousLoad?.cancel()
+        artworkTask?.cancel()
+        draftTask?.cancel()
+        opening = true
+        let previousSave = persistence
+        let url = URL(fileURLWithPath: url.path, isDirectory: true).standardizedFileURL
+        let store = LibraryStore(url: url)
+        loadTask = Task {
+            await previousLoad?.value
+            await previousSave?.value
+            guard !Task.isCancelled else { return }
+            do {
+                let pages = try await store.load(create: create)
+                try Task.checkCancellation()
+                self.store = store
+                self.url = url
+                applying = true
+                self.pages = pages
+                applying = false
+                UserDefaults.standard.set(url.path, forKey: "libraryPath")
+                select(nil)
+                showAllMedia = true
+                error = nil
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.error = "The library could not be opened. \(error.localizedDescription)"
+            }
+            opening = false
+            loadTask = nil
             cacheArtwork()
-        } catch { self.error = "The library could not be opened. \(error.localizedDescription)" }
+        }
     }
 
     // A queued save reads pages when it runs, so it also covers later changes. Saving an older list would move imported files back.
     private func persist() {
-        guard !queued else { return }
+        guard let store, !queued else { return }
         queued = true
         let previous = persistence
         persistence = Task {
@@ -164,7 +197,7 @@ struct FavoritePage: Identifiable, Codable, Sendable {
     }
 
     func save(_ pages: [FavoritePage], importing ids: Set<UUID>) async -> Bool {
-        guard ready, !saving else { return false }
+        guard ready, !saving, let store else { return false }
         saving = true
         defer { saving = false; cacheArtwork() }
         artworkTask?.cancel()
@@ -187,7 +220,7 @@ struct FavoritePage: Identifiable, Codable, Sendable {
     }
 
     private func cacheArtwork() {
-        guard ready, !saving else { return }
+        guard ready, !saving, let store else { return }
         artworkTask?.cancel()
         let snapshot = pages
         artworkTask = Task {
@@ -212,21 +245,16 @@ struct FavoritePage: Identifiable, Codable, Sendable {
         }
     }
 
-    @discardableResult func open(_ urls: [URL], player: PlayerModel) -> Bool {
-        let packages = urls.filter { $0.isFileURL && $0.pathExtension.lowercased() == "verclibrary" }
-        guard !packages.isEmpty else { return false }
-        guard packages.allSatisfy({ $0.resolvingSymlinksInPath().standardizedFileURL == Library.url.resolvingSymlinksInPath().standardizedFileURL }) else {
-            error = "Only Verc Library.verclibrary in your Movies folder is supported."
-            return true
-        }
-        guard !saving else { return true }
+    @discardableResult func open(_ urls: [URL], player: PlayerModel, create: Bool = false) -> Bool {
+        guard let url = urls.last(where: { $0.isFileURL && $0.pathExtension.lowercased() == "verclibrary" }) else { return false }
+        guard !saving else { error = "Wait for the files to finish importing before opening another library."; return true }
         player.stop()
         player.showInfo = false
         player.showURL = false
+        player.showIconPicker = false
         draft = nil
         pendingDeletion = nil
-        select(nil)
-        showAllMedia = true
+        load(url, create: create)
         NSApp.activate(ignoringOtherApps: true)
         return true
     }
@@ -258,16 +286,20 @@ struct FavoritePage: Identifiable, Codable, Sendable {
 
     func prepareDraft(_ urls: [URL], player: PlayerModel) {
         guard ready, !saving, !urls.isEmpty else { return }
-        Task {
+        draftTask?.cancel()
+        draftTask = Task {
             do {
                 var pages = try await FavoritePage.drafts(for: urls)
+                try Task.checkCancellation()
                 guard !pages.isEmpty else { player.error = "This selection contains no supported media files."; return }
                 let existing = Set(self.pages.flatMap(\.media).map(\.standardizedFileURL))
                 for index in pages.indices { pages[index].media.removeAll { existing.contains($0.standardizedFileURL) } }
                 pages.removeAll { $0.media.isEmpty }
                 guard !pages.isEmpty else { player.error = "No files were added. All selected files are already in your library."; return }
                 draft = pages
-            } catch { player.error = "These files or folders are unavailable. Choose them from their current location." }
+            } catch {
+                if !Task.isCancelled { player.error = "These files or folders are unavailable. Choose them from their current location." }
+            }
         }
     }
 }
@@ -570,8 +602,13 @@ private struct FavoriteLibrary: View {
             }
             .overlay {
                 if pages.isEmpty {
-                    if favorites.pages.isEmpty { ContentUnavailableView("Library Is Empty", systemImage: "rectangle.stack") }
-                    else if !query.isEmpty { ContentUnavailableView.search(text: query) }
+                    if favorites.pages.isEmpty {
+                        ContentUnavailableView {
+                            Label {
+                                Text("Library Is Empty").font(.body.weight(.regular)).foregroundStyle(.secondary)
+                            } icon: { Image(systemName: "rectangle.stack") }
+                        }
+                    } else if !query.isEmpty { ContentUnavailableView.search(text: query) }
                     else { ContentUnavailableView("No items", systemImage: "info.circle") }
                 }
             }
@@ -621,9 +658,7 @@ private struct FavoriteGallery: View {
                         LazyHStack(spacing: 24) {
                             ForEach(page.media, id: \.self) { url in
                                 let item = MediaItem(url: url)
-                                let title = page.title(for: url)
-                                let episode = page.info?.mediaType == .tv && item.isVideo ? MediaFilename(item.title).episode : nil
-                                FavoriteMediaCard(item: item, title: episode.map { "\($0). \(title)" } ?? title, artwork: page.artwork(for: url), player: player, width: width) {
+                                FavoriteMediaCard(item: item, title: page.title(for: url), artwork: page.artwork(for: url), player: player, width: width) {
                                     player.add(page.media, startingAt: url, page: page)
                                 }
                             }
@@ -774,7 +809,7 @@ private struct PlaybackBadges: ViewModifier {
     func body(content: Content) -> some View {
         content
             .overlay(alignment: .topLeading) {
-                if hovered, !item.isImage, let progress, progress.finished || progress.time > 0 {
+                if !item.isImage, let progress, progress.finished || progress.time > 0 {
                     Text(progress.finished ? "Finished" : "Played to \(timeLabel(progress.time))")
                         .font(.system(size: 11, weight: .medium)).monospacedDigit().foregroundStyle(.white)
                         .padding(.horizontal, 10).padding(.vertical, 6)

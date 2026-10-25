@@ -3,8 +3,13 @@ import Foundation
 import ImageIO
 
 enum Library {
-    static let url = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("Verc Library.verclibrary", isDirectory: true)
+    static let defaultURL = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("Verc.verclibrary", isDirectory: true)
+    static var url: URL {
+        if let path = UserDefaults.standard.string(forKey: "libraryPath") { return URL(fileURLWithPath: path, isDirectory: true) }
+        let legacy = defaultURL.deletingLastPathComponent().appendingPathComponent("Verc Library.verclibrary", isDirectory: true)
+        return !FileManager.default.fileExists(atPath: defaultURL.path) && FileManager.default.fileExists(atPath: legacy.path) ? legacy : defaultURL
+    }
 
     static func filename(_ title: String) -> String {
         let name = title.components(separatedBy: CharacterSet.controlCharacters.union(CharacterSet(charactersIn: "/:")))
@@ -21,7 +26,7 @@ enum Library {
     static func resolve(_ url: URL) -> URL {
         guard url.isFileURL else { return url }
         let resolved = url.resolvingSymlinksInPath()
-        return resolved.path.hasPrefix(Self.url.resolvingSymlinksInPath().path + "/") ? resolved : url
+        return resolved.pathComponents.dropLast().contains { $0.lowercased().hasSuffix(".verclibrary") } ? resolved : url
     }
 }
 
@@ -35,7 +40,7 @@ actor LibraryStore {
     private let root: URL
     private var connection: LibraryDatabase?
 
-    init(url: URL = Library.url) { root = url }
+    init(url: URL) { root = url }
 
     private func database() throws -> LibraryDatabase {
         let files = FileManager.default
@@ -120,21 +125,32 @@ actor LibraryStore {
         return database
     }
 
-    func load() throws -> [FavoritePage] {
+    func load(create: Bool = false) throws -> [FavoritePage] {
+        let files = FileManager.default
+        if create {
+            try files.createDirectory(at: root.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try files.createDirectory(at: root, withIntermediateDirectories: false)
+        } else {
+            guard try root.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true,
+                  files.fileExists(atPath: root.appendingPathComponent("Library.vercdb").path)
+                    || files.fileExists(atPath: root.appendingPathComponent("Library.plist").path) else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+        }
         let database = try database()
         recover(database)
         var pages = try database.read()
         for index in pages.indices { pages[index].cachedArtwork = localArtwork(pages[index]) }
         // Earlier versions saved favorites in UserDefaults. Their files stay where they are.
-        if let data = UserDefaults.standard.data(forKey: "favoritePages") {
+        if root == Library.url, let data = UserDefaults.standard.data(forKey: "favoritePages") {
             var seen = Set(pages.flatMap(\.media).map(\.standardizedFileURL))
             for var page in (try? JSONDecoder().decode([FavoritePage].self, from: data)) ?? [] where !pages.contains(where: { $0.id == page.id }) {
                 page.media = page.media.map(Library.resolve).filter { seen.insert($0.standardizedFileURL).inserted }
                 if !page.media.isEmpty { pages.append(page) }
             }
+            pages = try save(pages)
+            UserDefaults.standard.removeObject(forKey: "favoritePages")
         }
-        pages = try save(pages)
-        UserDefaults.standard.removeObject(forKey: "favoritePages")
         return pages
     }
 
@@ -146,6 +162,7 @@ actor LibraryStore {
         var reserved = Set<String>()
         var movedSubtitles = Set<URL>()
         for index in pages.indices {
+            pages[index].libraryURL = root
             if let directory = pages[index].directory {
                 guard !directory.isEmpty, directory != ".", directory != "..", !directory.contains("/"),
                       !directory.contains(":") else { throw CocoaError(.fileReadCorruptFile) }

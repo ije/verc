@@ -93,6 +93,7 @@ final class LibraryDatabase {
                 throw CocoaError(.fileReadCorruptFile)
             }
             var page = FavoritePage(id: id, title: title, background: try row[3].map(absoluteURL), clearedInfoTitle: row[4], directory: directory)
+            page.libraryURL = root
             if let value = row[5] {
                 guard let tmdbID = Int(value), let type = row[6].flatMap(TMDBTitle.MediaType.init(rawValue:)),
                       let name = row[7], let overview = row[8], let link = row[12] else { throw CocoaError(.fileReadCorruptFile) }

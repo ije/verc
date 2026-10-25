@@ -25,7 +25,7 @@ struct ContentView: View {
     @State private var isFullScreen = false
 
     private var playlistVisible: Bool { showPlaylist && player.playlist.count > 1 }
-    private var modal: Bool { player.showInfo || player.showURL || favorites.draft != nil }
+    private var modal: Bool { player.showInfo || player.showURL || player.showIconPicker || favorites.draft != nil }
     private var hasAudioChoice: Bool { player.audioTracks.lazy.filter { $0.id != -1 }.prefix(2).count > 1 }
     private var headerTitle: String {
         guard let current = player.current else { return favorites.showAllMedia ? "Library" : favorites.selectedPage?.displayTitle ?? "" }
@@ -55,6 +55,8 @@ struct ContentView: View {
         ZStack {
             if player.current == nil {
                 StartPage(player: player, favorites: favorites)
+                    .id(favorites.url)
+                    .disabled(!favorites.ready)
                     .allowsHitTesting(popup == nil)
             } else {
                 stage
@@ -131,6 +133,7 @@ struct ContentView: View {
         .onChange(of: scenePhase) { if scenePhase != .active && popup != .credits { popup = nil } }
         .onChange(of: player.showURL) { revealControls() }
         .onChange(of: player.showInfo) { revealControls() }
+        .onChange(of: player.showIconPicker) { popup = nil; revealControls() }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in isFullScreen = true }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in isFullScreen = false }
         .onReceive(NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)) { notification in
@@ -190,7 +193,9 @@ struct ContentView: View {
             if modal {
                 ZStack {
                     Color.black.opacity(0.18).ignoresSafeArea().accessibilityHidden(true)
-                    if let pages = favorites.draft {
+                        .onTapGesture { player.showIconPicker = false }
+                    if player.showIconPicker { IconPicker(isPresented: $player.showIconPicker) }
+                    else if let pages = favorites.draft {
                         GeometryReader { geometry in
                             let compact = geometry.size.height < 580
                             FavoriteEditor(favorites: favorites, pages: pages, player: player, compact: compact)
@@ -225,7 +230,7 @@ struct ContentView: View {
     private func revealControls() {
         hideTask?.cancel()
         controlsVisible = true
-        guard player.isPlaying, !chromeHovered, !scrubbing, popup == nil, !showPlaylist, trackedMenus.isEmpty, !player.showURL, !player.showInfo else { return }
+        guard player.isPlaying, !chromeHovered, !scrubbing, popup == nil, !showPlaylist, trackedMenus.isEmpty, !player.showURL, !player.showInfo, !player.showIconPicker else { return }
         hideTask = Task {
             do { try await Task.sleep(for: .seconds(2.5)) } catch { return }
             withAnimation(.easeOut(duration: 0.2)) { controlsVisible = false }

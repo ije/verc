@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 @main
 struct VercApp: App {
@@ -51,15 +52,20 @@ struct VercApp: App {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        (AppIcon(rawValue: UserDefaults.standard.string(forKey: "appIcon") ?? "") ?? .glass).apply()
         NSApp.activate(ignoringOtherApps: true)
         player.openLibrary = { [weak self] urls in
             guard let self else { return false }
             return favorites.open(urls, player: player)
         }
-        Task { await favorites.load() }
         let arguments = CommandLine.arguments.dropFirst().filter { !$0.hasPrefix("-") }
         let files = arguments.filter { FileManager.default.fileExists(atPath: $0) }.map { URL(fileURLWithPath: $0) }
         if !files.isEmpty, !favorites.open(files, player: player) { player.add(files) }
+        if !favorites.opening && !favorites.ready {
+            let url = Library.url
+            favorites.load(url, create: UserDefaults.standard.string(forKey: "libraryPath") == nil && url == Library.defaultURL
+                && !FileManager.default.fileExists(atPath: url.path))
+        }
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
@@ -91,9 +97,42 @@ struct PlayerCommands: Commands {
         CommandGroup(replacing: .appInfo) {
             Button("About Verc") { openWindow(id: "about") }
         }
+        CommandGroup(replacing: .appSettings) {
+            Button("App Icon…") {
+                openWindow(id: "player")
+                player.showIconPicker.toggle()
+            }.keyboardShortcut(",")
+        }
         CommandGroup(replacing: .newItem) {
             Button("Open File…") { player.openFiles() }.keyboardShortcut("o")
             Button("Open URL…") { player.showURL = true }.keyboardShortcut("o", modifiers: [.command, .shift])
+            Divider()
+            Button("Create Library…") {
+                let panel = NSSavePanel()
+                panel.title = "Create Library"
+                panel.prompt = "Create"
+                panel.nameFieldStringValue = "Verc.verclibrary"
+                panel.allowedContentTypes = [UTType(exportedAs: "me.jex.verc.library", conformingTo: .package)]
+                panel.directoryURL = favorites.url?.deletingLastPathComponent() ?? Library.defaultURL.deletingLastPathComponent()
+                panel.begin { response in
+                    guard response == .OK, let url = panel.url else { return }
+                    openWindow(id: "player")
+                    favorites.open([url], player: player, create: true)
+                }
+            }
+            .disabled(favorites.opening || favorites.saving || favorites.draft != nil)
+            Button("Open Library…") {
+                let panel = NSOpenPanel()
+                panel.title = "Open Library"
+                panel.allowedContentTypes = [UTType(exportedAs: "me.jex.verc.library", conformingTo: .package)]
+                panel.directoryURL = favorites.url?.deletingLastPathComponent() ?? Library.defaultURL.deletingLastPathComponent()
+                panel.begin { response in
+                    guard response == .OK else { return }
+                    openWindow(id: "player")
+                    favorites.open(panel.urls, player: player)
+                }
+            }
+            .disabled(favorites.opening || favorites.saving || favorites.draft != nil)
         }
         CommandGroup(replacing: .saveItem) {
             Button("Save Current Frame") { player.saveFrame() }.keyboardShortcut("s").disabled(!player.canSaveFrame)
@@ -116,7 +155,7 @@ struct PlayerCommands: Commands {
         }
         CommandMenu("Playback") {
             // Menu key equivalents run before text fields get the key, so turn off single keys while one is shown.
-            let typing = player.showURL || favorites.draft != nil || favorites.showAllMedia && player.current == nil
+            let typing = player.showURL || player.showIconPicker || favorites.draft != nil || favorites.showAllMedia && player.current == nil
             Button(player.playLabel) { player.togglePlay() }
                 .keyboardShortcut(typing ? nil : KeyboardShortcut(.space, modifiers: []))
             Button("Stop") { player.stop() }.keyboardShortcut(".").disabled(player.current == nil)
@@ -138,7 +177,7 @@ struct PlayerCommands: Commands {
             }
         }
         CommandGroup(after: .toolbar) {
-            let browsing = player.current == nil && !player.showURL && !player.showInfo && favorites.draft == nil
+            let browsing = favorites.ready && player.current == nil && !player.showURL && !player.showInfo && !player.showIconPicker && favorites.draft == nil
                 && favorites.pendingDeletion == nil && !favorites.showAllMedia
             Button("Previous Preview") { favorites.movePreview(by: -1) }
                 .keyboardShortcut(browsing ? KeyboardShortcut(.leftArrow, modifiers: []) : nil)

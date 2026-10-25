@@ -524,6 +524,7 @@ final class VLC: @unchecked Sendable {
     var fillVideo = true { didSet { updateCrop() } }
     var viewport = CGSize.zero { didSet { updateCrop() } }
     var showURL = false
+    var showIconPicker = false
     var showInfo = false {
         didSet { if showInfo { endPictureInPicture() } }
     }
