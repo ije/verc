@@ -60,7 +60,6 @@ typedef struct {
     X(void *, media_list_item_at_index, (void *, int)) \
     X(void, media_list_release, (void *)) \
     X(void, media_player_set_media, (void *, void *)) \
-    X(void *, media_player_get_media, (void *)) \
     X(void, media_player_set_nsobject, (void *, void *)) \
     X(int, media_player_play, (void *)) \
     X(void, media_player_stop, (void *)) \
@@ -89,6 +88,8 @@ struct VCEngine {
     void *library;
     void *instance;
     void *player;
+    // VLC 3 media references are not atomic; keep this reference until the player stops and releases its media.
+    void *media;
     void *subtitleState;
     void (*subtitleRelease)(void *);
     void (*subtitleLayout)(void *, VCSubtitleLayout, const char *);
@@ -179,6 +180,7 @@ VCEngine *vc_create(const char *directory, char *error, int capacity) {
 void vc_destroy(VCEngine *e) {
     e->media_player_stop(e->player);
     e->media_player_release(e->player);
+    if (e->media) e->media_release(e->media);
     e->release(e->instance);
     if (e->subtitleState) e->subtitleRelease(e->subtitleState);
     // VLC plugins can retain process-wide Objective-C classes; do not unload them.
@@ -213,7 +215,8 @@ int vc_open(VCEngine *e, const char *uri, double start, const char *const *subti
     if (start > 0 && isfinite(start)) start_at(e, media, start);
     for (int i = 0; i < count; i++) e->media_slaves_add(media, 0, 3, subtitles[i]);
     e->media_player_set_media(e->player, media);
-    e->media_release(media);
+    if (e->media) e->media_release(e->media);
+    e->media = media;
     return e->media_player_play(e->player);
 }
 void vc_stop(VCEngine *e) { e->media_player_stop(e->player); }
@@ -362,10 +365,8 @@ void vc_volume(VCEngine *e, int volume) { e->audio_set_volume(e->player, volume)
 int vc_rate(VCEngine *e, float rate) { return e->media_player_set_rate(e->player, rate); }
 int vc_snapshot(VCEngine *e, const char *path) { return e->video_take_snapshot(e->player, 0, path, 0, 0); }
 int vc_video_size(VCEngine *e, unsigned *width, unsigned *height, unsigned *ratioWidth, unsigned *ratioHeight) {
-    void *media = e->media_player_get_media(e->player);
-    if (!media) return -1;
-    VCVideoTrack video = video_track(e, media);
-    e->media_release(media);
+    if (!e->media) return -1;
+    VCVideoTrack video = video_track(e, e->media);
     if (!video.width) return -1;
     bool square = !video.sarNum || !video.sarDen;
     uint64_t x = (uint64_t)video.width * (square ? 1 : video.sarNum);
@@ -386,11 +387,7 @@ VCTrack *vc_tracks(VCEngine *e, int subtitles) {
 void vc_free_tracks(VCEngine *e, VCTrack *tracks) { e->track_description_list_release(tracks); }
 unsigned vc_media_slaves(VCEngine *e, VCMediaSlave ***slaves) {
     *slaves = NULL;
-    void *media = e->media_player_get_media(e->player);
-    if (!media) return 0;
-    unsigned count = e->media_slaves_get(media, slaves);
-    e->media_release(media);
-    return count;
+    return e->media ? e->media_slaves_get(e->media, slaves) : 0;
 }
 void vc_free_media_slaves(VCEngine *e, VCMediaSlave **slaves, unsigned count) { e->media_slaves_release(slaves, count); }
 int vc_selected_track(VCEngine *e, int subtitles) {

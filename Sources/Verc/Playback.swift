@@ -521,7 +521,12 @@ final class VLC: @unchecked Sendable {
         didSet { send(.rate(speed)); updateNowPlaying() }
     }
     var repeatMode = RepeatMode.off { didSet { updateNowPlaying() } }
-    var fillVideo = true { didSet { updateCrop() } }
+    var fillVideo = UserDefaults.standard.object(forKey: "fillVideo") as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(fillVideo, forKey: "fillVideo")
+            updateCrop()
+        }
+    }
     var viewport = CGSize.zero { didSet { updateCrop() } }
     var showURL = false
     var showIconPicker = false

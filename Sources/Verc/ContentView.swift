@@ -891,12 +891,10 @@ struct StreamDialog: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Open URL").font(.system(size: 25, weight: .semibold)).tracking(-0.8)
-            Text("Enter a direct media URL.").font(.system(size: 12)).foregroundStyle(.secondary)
+            Text("Open URL").font(.title2.weight(.semibold))
             TextField("https://example.com/video.mp4", text: $address).textFieldStyle(.roundedBorder).focused($focused)
                 .accessibilityLabel("Media URL")
             HStack {
-                Text("Stream URLs can appear in saved playback progress.").font(.system(size: 10)).foregroundStyle(Theme.muted)
                 Spacer()
                 Button("Cancel") { player.showURL = false }.buttonStyle(.glass).keyboardShortcut(.cancelAction)
                 Button("Open") { if let url { player.add([url]); player.showURL = false } }.buttonStyle(.glassProminent).keyboardShortcut(.defaultAction).disabled(url == nil)

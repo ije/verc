@@ -5,6 +5,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 import simd
 
+@MainActor private let tmdbLogo = Bundle.main.url(forResource: "TMDB", withExtension: "svg").flatMap { NSImage(contentsOf: $0) }
+
 struct FavoritePage: Identifiable, Codable, Sendable {
     var id = UUID()
     var title = ""
@@ -147,7 +149,7 @@ struct FavoritePage: Identifiable, Codable, Sendable {
     var pendingDeletion: FavoritePage?
     var selectedPage: FavoritePage? { pages.first { $0.id == selection } }
 
-    func load(_ url: URL, create: Bool = false) {
+    func load(_ url: URL, create: Bool = false, showLibrary: Bool = false) {
         guard !saving else { error = "Wait for the files to finish importing before opening another library."; return }
         let previousLoad = loadTask
         previousLoad?.cancel()
@@ -171,7 +173,7 @@ struct FavoritePage: Identifiable, Codable, Sendable {
                 applying = false
                 UserDefaults.standard.set(url.path, forKey: "libraryPath")
                 select(nil)
-                showAllMedia = true
+                showAllMedia = showLibrary
                 error = nil
             } catch {
                 guard !Task.isCancelled else { return }
@@ -231,12 +233,18 @@ struct FavoritePage: Identifiable, Codable, Sendable {
                    let response = try? await TMDB.load(.init(type: info.mediaType.rawValue, id: info.id)) {
                     page.info?.backgroundURLs = response.backgroundURLs
                 }
+                if let info = page.info, info.credits == nil,
+                   let response = try? await TMDB.load(.init(type: info.mediaType.rawValue, id: info.id, credits: true)) {
+                    page.info?.credits = response.credits
+                }
                 let cached = await store.cacheArtwork(page)
                 guard !Task.isCancelled else { return }
                 guard let index = pages.firstIndex(where: { $0.id == page.id && $0.info?.url == page.info?.url }),
-                      pages[index].info?.backgroundURLs != page.info?.backgroundURLs || pages[index].cachedArtwork != cached else { continue }
+                      pages[index].info?.backgroundURLs != page.info?.backgroundURLs || pages[index].info?.credits != page.info?.credits
+                        || pages[index].cachedArtwork != cached else { continue }
                 applying = true
                 pages[index].info?.backgroundURLs = page.info?.backgroundURLs
+                pages[index].info?.credits = page.info?.credits
                 pages[index].cachedArtwork = cached
                 applying = false
                 changed = true
@@ -254,7 +262,7 @@ struct FavoritePage: Identifiable, Codable, Sendable {
         player.showIconPicker = false
         draft = nil
         pendingDeletion = nil
-        load(url, create: create)
+        load(url, create: create, showLibrary: true)
         NSApp.activate(ignoringOtherApps: true)
         return true
     }
@@ -280,8 +288,9 @@ struct FavoritePage: Identifiable, Codable, Sendable {
 
     func movePreview(by offset: Int) {
         guard let page = selectedPage else { return }
-        let next = (previewSelection.flatMap { page.media.firstIndex(of: $0) } ?? 0) + offset
+        let next = (previewSelection.flatMap { page.media.firstIndex(of: $0) } ?? (page.info == nil ? 0 : -1)) + offset
         if page.media.indices.contains(next) { previewSelection = page.media[next] }
+        else if next == -1, let info = page.info { previewSelection = info.url }
     }
 
     func prepareDraft(_ urls: [URL], player: PlayerModel) {
@@ -313,6 +322,8 @@ struct StartPage: View {
     @State private var shown: UUID?
     @State private var tooltip: UUID?
     @State private var sortingDots = false
+    @State private var libraryHovered = false
+    @State private var addHovered = false
 
     init(player: PlayerModel, favorites: FavoritePages) {
         self.player = player
@@ -376,9 +387,12 @@ struct StartPage: View {
                             favorites.showAllMedia = true
                         } label: {
                             Image(systemName: "play.square.stack.fill").font(.system(size: 15, weight: .medium))
+                                .foregroundStyle(.white.opacity(libraryHovered ? 1 : 0.7))
                                 .frame(width: 32, height: 36).contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain).help("Show Library").accessibilityLabel("Show Library")
+                        .buttonStyle(.plain).help("Library").accessibilityLabel("Library")
+                        .onHover { libraryHovered = $0 }
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: libraryHovered)
                         Rectangle().fill(.white.opacity(0.15)).frame(width: 1, height: 20).padding(.horizontal, 4)
                         Button {
                             let panel = NSOpenPanel()
@@ -392,9 +406,12 @@ struct StartPage: View {
                             }
                         } label: {
                             Image(systemName: "plus").font(.system(size: 15, weight: .medium))
+                                .foregroundStyle(.white.opacity(addHovered ? 1 : 0.7))
                                 .frame(width: 32, height: 36).contentShape(Rectangle())
                         }
                         .buttonStyle(.plain).help("Add to Library…").accessibilityLabel("Add to Library")
+                        .onHover { addHovered = $0 }
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: addHovered)
                         .disabled(!favorites.ready || favorites.saving)
                     }
                     .padding(.horizontal, 8)
@@ -642,37 +659,36 @@ private struct FavoriteGallery: View {
                     Color.black.opacity(0.48)
                     LinearGradient(colors: [.black.opacity(0.15), .black.opacity(0.8)], startPoint: .top, endPoint: .bottom)
                 }
-                if let info = page.info, info.mediaType == .movie, let first = page.media.first {
-                    let url = favorites.previewSelection.flatMap { page.media.contains($0) ? $0 : nil } ?? first
-                    ScrollView {
-                        FavoriteMovieDetails(page: page, info: info, item: MediaItem(url: url), player: player, favorites: favorites,
-                                             posterWidth: min(280, geometry.size.width * 0.26, max(120, (geometry.size.height - 160) * 2 / 3)))
-                            .id(url)
-                            .frame(maxWidth: 800, minHeight: max(0, geometry.size.height - 160))
-                            .frame(maxWidth: .infinity)
-                            .padding(.horizontal, 40)
-                    }
-                    .padding(.top, 64).padding(.bottom, 96)
-                } else {
-                    ScrollView(.horizontal) {
-                        LazyHStack(spacing: 24) {
-                            ForEach(page.media, id: \.self) { url in
-                                let item = MediaItem(url: url)
-                                FavoriteMediaCard(item: item, title: page.title(for: url), artwork: page.artwork(for: url), player: player, width: width) {
-                                    player.add(page.media, startingAt: url, page: page)
-                                }
+                ScrollView(.horizontal) {
+                    LazyHStack(alignment: .top, spacing: 32) {
+                        if let info = page.info {
+                            let height = width * 9 / 16
+                            let posterWidth = info.posterURL == nil ? 0 : height * 2 / 3 + height * 0.05 + 40
+                            FavoriteDetails(page: page, info: info, height: height,
+                                            infoWidth: min(640, max(280, geometry.size.width * 0.48),
+                                                           geometry.size.width - 80 - posterWidth - (page.media.isEmpty ? 0 : 32 + 96)))
+                                .id(info.url)
+                        }
+                        ForEach(page.media, id: \.self) { url in
+                            let item = MediaItem(url: url)
+                            FavoriteMediaCard(item: item, title: page.title(for: url), artwork: page.artwork(for: url), player: player, width: width) {
+                                player.add(page.media, startingAt: url, page: page)
                             }
                         }
-                        .scrollTargetLayout()
                     }
-                    .scrollPosition(id: Binding(get: { favorites.selection == page.id ? favorites.previewSelection : nil }, set: {
-                        if favorites.selection == page.id { favorites.previewSelection = $0 }
-                    }), anchor: .leading)
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: favorites.previewSelection)
-                    .contentMargins(.horizontal, 40, for: .scrollContent)
-                    .scrollIndicators(.hidden)
-                    .padding(.top, 48).padding(.bottom, 74)
+                    .scrollTargetLayout()
+                    .frame(height: width * 9 / 16 + 32)
+                    .frame(minHeight: max(0, geometry.size.height - 160))
                 }
+                .scrollPosition(id: Binding(get: { favorites.selection == page.id ? favorites.previewSelection : nil }, set: {
+                    if favorites.selection == page.id { favorites.previewSelection = $0 }
+                }), anchor: .leading)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: favorites.previewSelection)
+                .contentMargins(.leading, 80, for: .scrollContent)
+                .contentMargins(.trailing, 40, for: .scrollContent)
+                .scrollClipDisabled()
+                .scrollIndicators(.hidden)
+                .padding(.top, 64).padding(.bottom, 96)
             }
         }
         .onChange(of: backgrounds) { backgroundIndex = 0 }
@@ -686,64 +702,84 @@ private struct FavoriteGallery: View {
     }
 }
 
-private struct FavoriteMovieDetails: View {
+private struct FavoriteDetails: View {
     let page: FavoritePage
     let info: TMDBTitle
-    let item: MediaItem
-    let player: PlayerModel
-    let favorites: FavoritePages
-    let posterWidth: CGFloat
-    @State private var duration: Double?
-    @State private var confirmRestart = false
-    @State private var hovered = false
+    let height: CGFloat
+    let infoWidth: CGFloat
+    @State private var textHeight: CGFloat = 0
 
     var body: some View {
-        let progress = player.progress[item.url]
-        HStack(alignment: .top, spacing: 32) {
-            Button {
-                if progress?.finished == true { confirmRestart = true }
-                else { player.add(page.media, startingAt: item.url, page: page) }
-            } label: {
-                FavoriteArtwork(url: info.posterURL.map(page.artworkURL) ?? item.url)
-                    .frame(width: posterWidth, height: posterWidth * 1.5)
+        HStack(alignment: .top, spacing: 40) {
+            if let poster = info.posterURL {
+                FavoriteArtwork(url: page.artworkURL(poster))
+                    .frame(width: height * 2 / 3, height: height)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .modifier(PlaybackBadges(item: item, progress: progress, hovered: hovered, inset: 16))
+                    .overlay { RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.18), lineWidth: 1) }
+                    .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
+                    .scaleEffect(1.15, anchor: .center)
+                    .padding(.trailing, height * 0.05)
             }
-            .buttonStyle(.plain).onHover { hovered = $0 }
-            .accessibilityLabel("Open \(page.title)")
-            .accessibilityValue(item.isImage ? "" : progress?.finished == true ? "Finished" : "\(Int((progress?.fraction ?? 0) * 100))% played")
             VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(page.title).font(.system(size: posterWidth < 180 ? 24 : 32, weight: .bold))
-                        .fixedSize(horizontal: false, vertical: true)
-                    let year = info.releaseDate.map { String($0.prefix(4)) }.flatMap { $0.isEmpty ? nil : $0 }
-                    Text([year, "Movie", (duration ?? progress?.duration).map(timeLabel)].compactMap { $0 }.joined(separator: " · "))
-                        .font(.system(size: 13)).foregroundStyle(.secondary)
-                }
-                Text(info.overview.isEmpty ? "No overview available." : info.overview)
-                    .font(.system(size: 14)).lineSpacing(4).foregroundStyle(.white.opacity(0.85))
-                    .fixedSize(horizontal: false, vertical: true)
-                Link(destination: info.url) {
-                    Text("TMDB \(Image(systemName: "arrow.up.right"))")
-                }
-                .font(.system(size: 12, weight: .medium)).buttonStyle(.plain)
-                if page.media.count > 1 {
-                    Picker("File", selection: Binding(get: { item.url }, set: { favorites.previewSelection = $0 })) {
-                        ForEach(page.media, id: \.self) { url in Text(url.lastPathComponent).tag(url) }
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(page.title).font(.system(size: height < 270 ? 24 : 32, weight: .bold))
+                                .fixedSize(horizontal: false, vertical: true)
+                            let year = info.releaseDate.map { String($0.prefix(4)) }.flatMap { $0.isEmpty ? nil : $0 }
+                            Text([year, info.mediaType == .movie ? "Movie" : "TV Show"].compactMap { $0 }.joined(separator: " · ") + page.seasonSuffix)
+                                .font(.system(size: 13)).foregroundStyle(.secondary)
+                        }
+                        Text(info.overview.isEmpty ? "No overview available." : info.overview)
+                            .font(.system(size: 14)).lineSpacing(4).foregroundStyle(.white.opacity(0.85))
+                            .fixedSize(horizontal: false, vertical: true)
+                        let credits = (info.credits ?? []).filter { $0.role == "Director" || $0.role == "Writer" || $0.role == "Cast" }
+                        if !credits.isEmpty {
+                            Grid(alignment: .topLeading, horizontalSpacing: 16, verticalSpacing: 8) {
+                                ForEach(credits, id: \.role) { credit in
+                                    let names = credit.names.joined(separator: ", ")
+                                    GridRow {
+                                        Text(credit.role).foregroundStyle(.secondary).fixedSize()
+                                        ViewThatFits(in: .horizontal) {
+                                            ForEach((0...credit.names.count).reversed(), id: \.self) { count in
+                                                HStack(spacing: 6) {
+                                                    if count > 0 {
+                                                        Text(credit.names.prefix(count).joined(separator: ", "))
+                                                    }
+                                                    if count < credit.names.count {
+                                                        Text("+\(credit.names.count - count)").foregroundStyle(.secondary)
+                                                    }
+                                                }
+                                                .fixedSize()
+                                            }
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .help(names).accessibilityElement(children: .ignore).accessibilityLabel(names)
+                                    }
+                                }
+                            }
+                            .font(.system(size: 12)).foregroundStyle(.white.opacity(0.85))
+                        }
                     }
-                    .labelsHidden().controlSize(.small)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { textHeight = $0 }
                 }
+                .frame(idealHeight: textHeight, maxHeight: textHeight == 0 ? nil : textHeight)
+                Link(destination: info.url) {
+                    HStack(spacing: 6) {
+                        if let logo = tmdbLogo {
+                            Image(nsImage: logo).resizable().scaledToFit().frame(width: 22, height: 16)
+                        } else { Text("TMDB").font(.system(size: 12, weight: .medium)) }
+                        Text("More Info").font(.system(size: 12, weight: .medium))
+                        Image(systemName: "arrow.up.right").font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.85))
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                }
+                .buttonStyle(.plain).glassEffect(.clear.interactive(), in: Capsule())
+                .help("Open on TMDB").accessibilityLabel("Open \(page.title) on TMDB")
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .alert("Play Again?", isPresented: $confirmRestart) {
-            Button("Play Again") { player.add(page.media, startingAt: item.url, page: page) }
-            Button("Cancel", role: .cancel) {}
-        } message: { Text("Play “\(page.title)” from the start?") }
-        .task(id: player.engineVersion) {
-            guard !item.isImage, let engine = player.engine else { return }
-            let loaded = await engine.duration(of: item.url)
-            if !Task.isCancelled { duration = loaded }
+            .frame(width: infoWidth, height: height, alignment: .topLeading)
         }
     }
 }
@@ -770,15 +806,9 @@ private struct FavoriteMediaCard: View {
                                 loading: artwork == nil && preview == nil && player.engineError == nil)
                     .frame(width: width, height: width * 9 / 16)
                     .clipShape(RoundedRectangle(cornerRadius: 24))
-                    .modifier(PlaybackBadges(item: item, progress: progress, hovered: hovered, inset: 18))
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(title).font(.system(size: 14, weight: .semibold)).lineLimit(1)
-                    if !item.isImage {
-                        Text(preview?.duration.map(timeLabel) ?? "—")
-                            .font(.system(size: 14, weight: .medium)).monospacedDigit().foregroundStyle(.gray).fixedSize()
-                    }
-                }
-                .padding(.horizontal, 4)
+                    .modifier(PlaybackBadges(item: item, progress: progress, duration: preview?.duration ?? progress?.duration, hovered: hovered, inset: 18))
+                Text(title).font(.system(size: 14, weight: .semibold)).lineLimit(1)
+                    .padding(.horizontal, 4)
             }
             .frame(width: width, alignment: .leading).contentShape(Rectangle())
         }
@@ -803,6 +833,7 @@ private struct FavoriteMediaCard: View {
 private struct PlaybackBadges: ViewModifier {
     let item: MediaItem
     let progress: PlaybackProgress?
+    let duration: Double?
     let hovered: Bool
     let inset: CGFloat
 
@@ -823,6 +854,15 @@ private struct PlaybackBadges: ViewModifier {
                         .font(.system(size: 17, weight: .semibold))
                         .frame(width: 44, height: 44)
                         .glassEffect(.regular, in: Circle())
+                        .padding(inset)
+                }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if !item.isImage {
+                    Text(duration.map(timeLabel) ?? "—")
+                        .font(.system(size: 11, weight: .medium)).monospacedDigit().foregroundStyle(.white)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .glassEffect(.regular, in: Capsule())
                         .padding(inset)
                 }
             }
@@ -906,7 +946,6 @@ struct FavoriteEditor: View {
     @State private var lookupAttempt = 0
     @State private var resolvedInputs: [UUID: [String]] = [:]
     @FocusState private var focused: UUID?
-    private static let tmdbLogo = Bundle.main.url(forResource: "TMDB", withExtension: "svg").flatMap { NSImage(contentsOf: $0) }
 
     var body: some View {
         let isEditing = pages.count == 1 && favorites.pages.contains { $0.id == pages[0].id }
@@ -963,7 +1002,7 @@ struct FavoriteEditor: View {
                             Label("Search TMDB", systemImage: "magnifyingglass")
                         }
                         Spacer()
-                        if let logo = Self.tmdbLogo {
+                        if let logo = tmdbLogo {
                             Link(destination: URL(string: "https://www.themoviedb.org/")!) {
                                 HStack(spacing: 6) {
                                     Text("Powered by").font(.system(size: 10)).foregroundStyle(.secondary)
@@ -1074,7 +1113,7 @@ struct FavoriteEditor: View {
             }
             HStack {
                 if isEditing {
-                    Button("Remove…", role: .destructive) { favorites.pendingDeletion = pages[0] }
+                    Button("Remove", role: .destructive) { favorites.pendingDeletion = pages[0] }
                         .help("Remove from Library…")
                         .foregroundStyle(.red)
                 }

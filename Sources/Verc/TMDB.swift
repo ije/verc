@@ -47,6 +47,10 @@ struct MediaFilename: Sendable {
 
 struct TMDBTitle: Codable, Sendable {
     enum MediaType: String, Codable, Sendable { case movie, tv }
+    struct Credit: Codable, Equatable, Sendable {
+        let role: String
+        let names: [String]
+    }
     let id: Int
     let mediaType: MediaType
     let title: String
@@ -56,6 +60,7 @@ struct TMDBTitle: Codable, Sendable {
     let backgroundURL: URL?
     var backgroundURLs: [URL]?
     let url: URL
+    var credits: [Credit]?
 }
 
 enum TMDB {
@@ -64,12 +69,14 @@ enum TMDB {
         var type: String
         var id: Int?
         var season: Int?
+        var credits: Bool?
     }
 
     struct Response: Decodable {
         var results: [TMDBTitle]?
         var episodes: [Episode]?
         var backgroundURLs: [URL]?
+        var credits: [TMDBTitle.Credit]?
     }
 
     struct Episode: Decodable {

@@ -85,7 +85,7 @@ final class LibraryDatabase {
         var indexes: [String: Int] = [:]
         for row in try run("""
             SELECT id, title, directory, background, cleared_title, tmdb_id, media_type, tmdb_title,
-                   overview, release_date, poster_url, backdrop_url, tmdb_url, backdrops_loaded, episodes_loaded
+                   overview, release_date, poster_url, backdrop_url, tmdb_url, backdrops_loaded, episodes_loaded, credits
             FROM items ORDER BY position
             """) {
             guard let key = row[0], let id = UUID(uuidString: key), let title = row[1], let directory = row[2],
@@ -99,7 +99,8 @@ final class LibraryDatabase {
                       let name = row[7], let overview = row[8], let link = row[12] else { throw CocoaError(.fileReadCorruptFile) }
                 page.info = TMDBTitle(id: tmdbID, mediaType: type, title: name, overview: overview, releaseDate: row[9],
                                       posterURL: try row[10].map(absoluteURL), backgroundURL: try row[11].map(absoluteURL),
-                                      backgroundURLs: row[13] == "1" ? [] : nil, url: try absoluteURL(link))
+                                      backgroundURLs: row[13] == "1" ? [] : nil, url: try absoluteURL(link),
+                                      credits: try row[15].map { try JSONDecoder().decode([TMDBTitle.Credit].self, from: Data($0.utf8)) })
             }
             let episodes = row[14].flatMap(Int.init) ?? 0
             page.episodeTitles = episodes & 1 == 0 ? nil : [:]
@@ -138,12 +139,13 @@ final class LibraryDatabase {
             let episodes = (page.episodeTitles == nil ? 0 : 1) | (page.episodeImages == nil ? 0 : 2)
             try run("""
                 INSERT INTO items (id, position, title, directory, background, cleared_title, tmdb_id, media_type,
-                                   tmdb_title, overview, release_date, poster_url, backdrop_url, tmdb_url, backdrops_loaded, episodes_loaded)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                   tmdb_title, overview, release_date, poster_url, backdrop_url, tmdb_url, backdrops_loaded, episodes_loaded, credits)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, [id, String(position), page.title, directory, page.background.map(relativeURL), page.clearedInfoTitle,
                       info.map { String($0.id) }, info?.mediaType.rawValue, info?.title, info?.overview, info?.releaseDate,
                       info?.posterURL.map(relativeURL), info?.backgroundURL.map(relativeURL), info.map { relativeURL($0.url) },
-                      info?.backgroundURLs == nil ? "0" : "1", String(episodes)])
+                      info?.backgroundURLs == nil ? "0" : "1", String(episodes),
+                      try info?.credits.map { String(decoding: try JSONEncoder().encode($0), as: UTF8.self) }])
             for (position, url) in page.media.enumerated() {
                 try run("INSERT INTO media VALUES (?, ?, ?)", [id, String(position), relativeURL(url)])
             }

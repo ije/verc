@@ -55,7 +55,7 @@ actor LibraryStore {
         try database.run("BEGIN IMMEDIATE")
         do {
             let version = try database.run("PRAGMA user_version").first?.first ?? nil
-            guard version == "0" || version == "1" || version == "2" || version == "3" else {
+            guard version == "0" || version == "1" || version == "2" || version == "3" || version == "4" else {
                 throw CocoaError(.fileReadUnknown, userInfo: [NSLocalizedDescriptionKey: "This library requires a newer version of Verc."])
             }
             if version == "0" {
@@ -64,7 +64,7 @@ actor LibraryStore {
                         id TEXT PRIMARY KEY, position INTEGER NOT NULL UNIQUE, title TEXT NOT NULL, directory TEXT NOT NULL,
                         background TEXT, cleared_title TEXT, tmdb_id INTEGER, media_type TEXT, tmdb_title TEXT, overview TEXT,
                         release_date TEXT, poster_url TEXT, backdrop_url TEXT, tmdb_url TEXT,
-                        backdrops_loaded INTEGER NOT NULL, episodes_loaded INTEGER NOT NULL
+                        backdrops_loaded INTEGER NOT NULL, episodes_loaded INTEGER NOT NULL, credits TEXT
                     )
                     """)
                 for table in ["media", "backdrops"] {
@@ -97,11 +97,12 @@ actor LibraryStore {
                     try database.run("ALTER TABLE \(table) RENAME COLUMN page_id TO item_id")
                 }
             }
-            if version != "3" {
+            if version != "3" && version != "4" {
                 // Imported files keep their original paths, so removing an item can move them back.
                 try database.run("CREATE TABLE origins (destination TEXT PRIMARY KEY, source TEXT NOT NULL, media TEXT NOT NULL)")
-                try database.run("PRAGMA user_version = 3")
             }
+            if version != "0" && version != "4" { try database.run("ALTER TABLE items ADD COLUMN credits TEXT") }
+            if version != "4" { try database.run("PRAGMA user_version = 4") }
             if files.fileExists(atPath: journal.path) {
                 let committed = Set(try database.read().flatMap(\.media))
                 for move in try PropertyListDecoder().decode([Move].self, from: Data(contentsOf: journal)) where !committed.contains(move.media) {

@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 enum AppIcon: String, CaseIterable, Identifiable {
-    case original, glass, prism
+    case original, prism, glass
 
     var id: Self { self }
     var title: String { rawValue.capitalized }
