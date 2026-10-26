@@ -66,7 +66,7 @@ struct MediaItem: Identifiable {
             guard !cancelled() else { return [] }
             let file = entry.standardizedFileURL
             let companion = companions.contains(where: file.path.hasPrefix)
-            if (try? file.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+            if (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
                 // Enter only subtitle folders, so a large folder such as Downloads does not delay playback.
                 let title = " " + subtitleName(file.lastPathComponent) + " "
                 if !companion && (files.level > 2 || files.level == 1 && !title.contains(" " + name + " ")
@@ -76,9 +76,10 @@ struct MediaItem: Identifiable {
                 continue
             }
             let ext = file.pathExtension.lowercased()
+            let isMedia = audioExtensions.contains(ext) || videoExtensions.contains(ext)
+            guard isMedia || subtitleExtensions.contains(ext) else { continue }
             let title = subtitleName(file.deletingPathExtension().lastPathComponent)
-            if audioExtensions.contains(ext) || videoExtensions.contains(ext) { names.insert(title); continue }
-            guard subtitleExtensions.contains(ext) else { continue }
+            if isMedia { names.insert(title); continue }
             let path = file.path.dropFirst(folder.path.count)
             if companion { subtitles.append(file) }
             else if !library || !path.contains("/Subs/") && !path.contains("/Subtitles/") {
@@ -565,7 +566,7 @@ final class VLC: @unchecked Sendable {
            let saved = try? JSONDecoder().decode([URL: PlaybackProgress].self, from: data) {
             progress = saved.filter { $0.value.time >= 0 && $0.value.duration > 0 }
         }
-        if let font = UserDefaults.standard.string(forKey: "subtitleFont"), Self.subtitleFonts.contains(font) { subtitleFont = font }
+        if let font = UserDefaults.standard.string(forKey: "subtitleFont"), NSFontManager.shared.availableMembers(ofFontFamily: font) != nil { subtitleFont = font }
         videoView.wantsLayer = true
         videoView.layer?.backgroundColor = NSColor.black.cgColor
         let engine = VLC(view: UInt(bitPattern: Unmanaged.passUnretained(videoView).toOpaque())) { [weak self] result in
@@ -601,7 +602,10 @@ final class VLC: @unchecked Sendable {
 
     private func engineStarted(_ result: Result<String, any Error>) {
         switch result {
-        case let .success(version): engineVersion = version
+        case let .success(version):
+            engineVersion = version
+            // VLC starts at full volume, so set it before the first media plays.
+            send(.volume(muted ? 0 : volume))
         case let .failure(failure):
             engineError = failure.localizedDescription
             if current != nil { state = 7; error = engineError }
@@ -650,16 +654,19 @@ final class VLC: @unchecked Sendable {
         if state == 6 || (state == 4 && previous != 4) || (time > 0 && Date().timeIntervalSince(lastProgressSave) >= 5) {
             saveProgress()
         }
-        if state == 6 && previous != 6 {
-            if repeatMode == .one { togglePlay() }
-            else if let index = playlist.firstIndex(where: { $0.id == current?.id }) {
-                if index + 1 < playlist.count { play(playlist[index + 1]) }
-                else if repeatMode == .all, let first = playlist.first { play(first) }
-            }
-        } else if state == 7 && previous != 7 {
+        if state == 6 && previous != 6 { advance() }
+        else if state == 7 && previous != 7 {
             error = "Verc could not play this media. The file may be damaged, or the stream may be unavailable."
         }
         if changed { updateNowPlaying() }
+    }
+
+    private func advance() {
+        if repeatMode == .one { togglePlay() }
+        else if let index = playlist.firstIndex(where: { $0.id == current?.id }) {
+            if index + 1 < playlist.count { play(playlist[index + 1]) }
+            else if repeatMode == .all, let first = playlist.first { play(first) }
+        }
     }
 
     private func handleMediaCommand(_ command: MediaCommand, seconds: Double?) -> MPRemoteCommandHandlerStatus {
@@ -959,6 +966,7 @@ final class VLC: @unchecked Sendable {
             if let activity = sleepActivity { ProcessInfo.processInfo.endActivity(activity); sleepActivity = nil }
             send(.stop)
             saveProgress()
+            advance()
         } else { send(.seek(time)) }
         updateNowPlaying()
     }
@@ -969,7 +977,10 @@ final class VLC: @unchecked Sendable {
         let base = seekSeconds == nil ? time : seekTarget
         if seekSeconds?.sign != offset.sign { seekOrigin = base }
         seekTarget = max(0, min(base + offset, duration > 0 ? duration : base + offset))
+        let ending = duration > 0 && seekTarget >= duration
         seek(to: seekTarget)
+        // A seek to the end can start the next item, which must not count from this target.
+        guard !ending || state == 6 else { return }
         // Keep the offset's sign even when the move is zero, so the feedback shows the pressed direction at the ends.
         seekSeconds = Double(signOf: offset, magnitudeOf: seekTarget - seekOrigin)
         seekFeedbackTask = Task {

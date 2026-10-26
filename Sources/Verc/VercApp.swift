@@ -80,7 +80,12 @@ struct VercApp: App {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let engine = player.engine else { return .terminateNow }
         player.stop()
-        engine.shutdown { Task { @MainActor in NSApp.reply(toApplicationShouldTerminate: true) } }
+        Task {
+            // A quit during an import stops the file moves, and the next launch moves the files back.
+            await favorites.flush()
+            await withCheckedContinuation { done in engine.shutdown { done.resume() } }
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
         return .terminateLater
     }
 

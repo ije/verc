@@ -185,6 +185,8 @@ struct FavoritePage: Identifiable, Codable, Sendable {
         }
     }
 
+    func flush() async { await persistence?.value }
+
     // A queued save reads pages when it runs, so it also covers later changes. Saving an older list would move imported files back.
     private func persist() {
         guard let store, !queued else { return }

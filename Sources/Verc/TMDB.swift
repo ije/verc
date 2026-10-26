@@ -39,7 +39,7 @@ struct MediaFilename: Sendable {
             .trimmingCharacters(in: CharacterSet(charactersIn: " ._-()[]"))
         let parsed = self
         Self.cache.withLock { cache in
-            if cache.count >= 4096 { cache.removeAll() }
+            if cache.count >= 10000 { cache.removeAll() }
             cache[name] = parsed
         }
     }

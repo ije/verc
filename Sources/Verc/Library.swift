@@ -18,7 +18,8 @@ enum Library {
     }
 
     static func artworkName(_ url: URL) -> String {
-        let hash = SHA256.hash(data: Data(url.absoluteString.utf8)).map { String(format: "%02x", $0) }.joined()
+        let digits = Array("0123456789abcdef".utf8)
+        let hash = String(decoding: SHA256.hash(data: Data(url.absoluteString.utf8)).flatMap { [digits[Int($0 >> 4)], digits[Int($0 & 15)]] }, as: UTF8.self)
         return url.pathExtension.isEmpty ? hash : hash + "." + url.pathExtension.lowercased()
     }
 
