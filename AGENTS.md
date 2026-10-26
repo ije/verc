@@ -60,14 +60,15 @@ For documentation-only changes, check the diff and referenced paths. No app buil
 
 ## Website
 
-`Website/` uses JavaScript ES modules and Cloudflare Workers.
+`Website/` uses TypeScript ES modules and Cloudflare Workers.
 
-- `worker.js`: the `POST /tmdb` endpoint, request validation, TMDB requests, and response cache.
+- `index.ts`: the `POST /tmdb` endpoint, request validation, TMDB requests, and response cache.
 - `cloudflare.config.ts`: Worker name, entrypoint, compatibility date, and the `verc.download` custom domain. The Cache API does not work on `workers.dev`.
-- `package.json`: commands that use the `cf` CLI and Node.js test runner. `cf` builds with the `wrangler` dev dependency.
+- `package.json`: commands that use the `cf` CLI. `cf` builds with the `wrangler` dependency.
+- `index.test.ts`: Worker tests using `bun:test`.
 - `.env.example`: local environment variables. The Worker uses `TMDB_API_READ_ACCESS_TOKEN` for authentication.
 
-- Use four-space indentation and the current JavaScript style.
+- Use four-space indentation and the current TypeScript style.
 - Keep response fields compatible with `Sources/Verc/TMDB.swift`.
 - Keep TMDB credentials in the Worker environment. Do not include secrets in source files, responses, or logs.
 - Preserve request validation, the 4096-byte body limit, CORS headers, and the eight-second timeout for TMDB requests.
@@ -78,11 +79,11 @@ For documentation-only changes, check the diff and referenced paths. No app buil
 Run commands from `Website/`. The scripts require the `cf` CLI on `PATH`.
 
 ```sh
-npm install
-npm run dev
-npm run build
-npm test
+bun install
+bun run dev
+bun run build
+bun test
 ```
 
-No test files exist yet. After Worker changes, check search, episode lookup, invalid requests, CORS, cache behavior, and upstream errors.
-Use `npm run deploy` to deploy the Worker when the task requires deployment.
+After Worker changes, check search, episode lookup, invalid requests, CORS, cache behavior, and upstream errors.
+Use `bun run deploy` to deploy the Worker when the task requires deployment.
