@@ -5,10 +5,9 @@
   "scripts": {
     "dev": "cf dev",
     "build": "cf build",
-    "deploy": "cf deploy",
-    "test": "node --test"
+    "deploy": "cf deploy"
   },
-  "devDependencies": {
-    "wrangler": "^4.151.2"
+  "dependencies": {
+    "wrangler": "^4.152.0"
   }
 }
