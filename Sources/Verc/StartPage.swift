@@ -666,7 +666,7 @@ private struct FavoriteGallery: View {
                         if let info = page.info {
                             let height = width * 9 / 16
                             let posterWidth = info.posterURL == nil ? 0 : height * 2 / 3 + height * 0.05 + 40
-                            FavoriteDetails(page: page, info: info, height: height,
+                            FavoriteDetails(page: page, info: info, player: player, height: height,
                                             infoWidth: min(640, max(280, geometry.size.width * 0.48),
                                                            geometry.size.width - 80 - posterWidth - (page.media.isEmpty ? 0 : 32 + 96)))
                                 .id(info.url)
@@ -707,6 +707,7 @@ private struct FavoriteGallery: View {
 private struct FavoriteDetails: View {
     let page: FavoritePage
     let info: TMDBTitle
+    let player: PlayerModel
     let height: CGFloat
     let infoWidth: CGFloat
     @State private var textHeight: CGFloat = 0
@@ -767,19 +768,39 @@ private struct FavoriteDetails: View {
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { textHeight = $0 }
                 }
                 .frame(idealHeight: textHeight, maxHeight: textHeight == 0 ? nil : textHeight)
-                Link(destination: info.url) {
-                    HStack(spacing: 6) {
-                        if let logo = tmdbLogo {
-                            Image(nsImage: logo).resizable().scaledToFit().frame(width: 22, height: 16)
-                        } else { Text("TMDB").font(.system(size: 12, weight: .medium)) }
-                        Text("More Info").font(.system(size: 12, weight: .medium))
-                        Image(systemName: "arrow.up.right").font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.85))
+                HStack(spacing: 12) {
+                    let unfinished = page.media.first { player.progress[$0]?.finished != true }
+                    if let url = unfinished ?? page.media.first {
+                        let label = unfinished != nil && page.media.contains { (player.progress[$0]?.time ?? 0) > 0 } ? "Resume" : "Play"
+                        Button {
+                            player.add(page.media, startingAt: url, page: page)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "play.fill")
+                                Text(label)
+                            }
+                            .font(.system(size: 12, weight: .medium))
+                            .padding(.horizontal, 12).padding(.vertical, 8)
+                            .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain).glassEffect(.clear.interactive(), in: Capsule())
+                        .accessibilityLabel("\(label) \(page.title)")
                     }
-                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    Link(destination: info.url) {
+                        HStack(spacing: 6) {
+                            if let logo = tmdbLogo {
+                                Image(nsImage: logo).resizable().scaledToFit().frame(width: 22, height: 16)
+                            } else { Text("TMDB").font(.system(size: 12, weight: .medium)) }
+                            Text("More Info").font(.system(size: 12, weight: .medium))
+                            Image(systemName: "arrow.up.right").font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.85))
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain).glassEffect(.clear.interactive(), in: Capsule())
+                    .help("Open on TMDB").accessibilityLabel("Open \(page.title) on TMDB")
                 }
-                .buttonStyle(.plain).glassEffect(.clear.interactive(), in: Capsule())
-                .help("Open on TMDB").accessibilityLabel("Open \(page.title) on TMDB")
             }
             .frame(width: infoWidth, height: height, alignment: .topLeading)
         }
