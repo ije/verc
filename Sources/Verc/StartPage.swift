@@ -769,9 +769,12 @@ private struct FavoriteDetails: View {
                 }
                 .frame(idealHeight: textHeight, maxHeight: textHeight == 0 ? nil : textHeight)
                 HStack(spacing: 12) {
-                    let unfinished = page.media.first { player.progress[$0]?.finished != true }
-                    if let url = unfinished ?? page.media.first {
-                        let label = unfinished != nil && page.media.contains { (player.progress[$0]?.time ?? 0) > 0 } ? "Resume" : "Play"
+                    let latest = page.media.lazy.filter { player.progress[$0] != nil }.max {
+                        (player.progress[$0]?.date ?? .distantPast) < (player.progress[$1]?.date ?? .distantPast)
+                    }
+                    if let url = latest ?? page.media.first {
+                        let saved = player.progress[url]
+                        let label = (saved?.time ?? 0) > 0 && saved?.finished == false ? "Resume" : "Play"
                         Button {
                             player.add(page.media, startingAt: url, page: page)
                         } label: {
