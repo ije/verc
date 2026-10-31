@@ -200,7 +200,7 @@ struct FavoritePage: Identifiable, Codable, Sendable {
         }
     }
 
-    func save(_ pages: [FavoritePage], importing ids: Set<UUID>) async -> Bool {
+    func save(_ pages: [FavoritePage], importing ids: Set<UUID>, moving: Set<URL> = []) async -> Bool {
         guard ready, !saving, let store else { return false }
         saving = true
         defer { saving = false; cacheArtwork() }
@@ -209,7 +209,7 @@ struct FavoritePage: Identifiable, Codable, Sendable {
         let task = Task {
             await previous?.value
             do {
-                let saved = try await store.save(pages, importing: ids)
+                let saved = try await store.save(pages, importing: ids, moving: moving)
                 applying = true
                 self.pages = saved
                 applying = false
@@ -967,6 +967,9 @@ struct FavoriteEditor: View {
     let compact: Bool
     @State private var loading = false
     @State private var addingFiles = false
+    @State private var deleteOriginals = false
+    @State private var originalsToDelete: Set<URL> = []
+    @State private var pendingFiles: [URL]?
     @State private var bodyHeight: CGFloat = 0
     @State private var lookupStatus: [UUID: (message: String, retry: Bool)] = [:]
     @State private var lookupAttempt = 0
@@ -1060,7 +1063,8 @@ struct FavoriteEditor: View {
                                     var seen = Set((favorites.pages.filter { $0.id != page.id }.flatMap(\.media) + pages.flatMap(\.media)).map(\.standardizedFileURL))
                                     let media = groups.flatMap(\.media).filter { seen.insert($0.standardizedFileURL).inserted }
                                     guard !media.isEmpty else { player.error = "No files were added. All selected files are already in your library or this item."; return }
-                                    page.media += media
+                                    if isEditing { pendingFiles = media }
+                                    else { page.media += media }
                                 } catch { player.error = "These files or folders are unavailable. Choose them from their current location." }
                             }
                         }
@@ -1076,6 +1080,7 @@ struct FavoriteEditor: View {
                     ForEach(page.media, id: \.self) { url in
                         FavoriteEditorRow(url: url, info: page.info, title: page.title(for: url), lastEpisodes: lastEpisodes, player: player) {
                             page.media.removeAll { $0 == url }
+                            originalsToDelete.remove(url)
                         }
                     }
                     if page.media.isEmpty { Text("Add files to this library item.").foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading) }
@@ -1088,6 +1093,11 @@ struct FavoriteEditor: View {
                     .padding(.vertical, 12)
                     .layoutPriority(-1)
                     .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+                if !isEditing, page.id == pages.last?.id {
+                    Toggle("Delete original files", isOn: $deleteOriginals).toggleStyle(.checkbox)
+                        .font(.system(size: 12))
+                        .help("Keep the files in the library and delete them from their original locations.")
+                }
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Background Image").font(.system(size: 12, weight: .medium))
@@ -1114,7 +1124,10 @@ struct FavoriteEditor: View {
             Text(isEditing ? pages[0].editTitle : "Add to Library").font(.title2.weight(.semibold))
                 .frame(maxWidth: .infinity, alignment: .leading)
             if favorites.saving {
-                HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Moving files to the library…") }
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Adding files to the library…")
+                }
                     .font(.system(size: 12)).foregroundStyle(.secondary)
             }
             if loading {
@@ -1172,15 +1185,19 @@ struct FavoriteEditor: View {
                         if !added.contains(page.id) { added.append(page.id) }
                     }
                     guard let first = added.first else { player.error = "No files were added. All selected files are already in your library."; return }
+                    let originals = deleteOriginals ? Set(pages.flatMap(\.media)) : originalsToDelete
                     Task {
-                        guard await favorites.save(saved, importing: Set(added)) else { return }
+                        guard await favorites.save(saved, importing: Set(added), moving: originals) else { return }
                         var moved: [URL: URL] = [:]
                         for page in saved {
                             guard let updated = favorites.pages.first(where: { $0.id == page.id }) else { continue }
                             for (source, destination) in zip(page.media, updated.media) where source != destination { moved[source] = destination }
                         }
-                        if let current = player.current, moved[current.url] != nil { player.stop() }
-                        if !moved.isEmpty { player.saveProgress(relocating: moved) }
+                        if let current = player.current, moved[current.url] != nil {
+                            if originals.contains(current.url) { player.stop() }
+                            else { player.saveProgress() }
+                        }
+                        if !moved.isEmpty { player.saveProgress(relocating: moved, copying: Set(moved.keys).subtracting(originals)) }
                         favorites.draft = nil
                         favorites.select(first)
                         if added.count > 1 { favorites.showAllMedia = true }
@@ -1196,6 +1213,16 @@ struct FavoriteEditor: View {
         .glassEffect(.regular.tint(.black.opacity(0.25)), in: RoundedRectangle(cornerRadius: 20))
         content
         .disabled(favorites.saving)
+        .alert("Delete original files?", isPresented: Binding(get: { pendingFiles != nil }, set: { if !$0 { pendingFiles = nil } }), presenting: pendingFiles) { media in
+            Button("Keep Originals") { pages[0].media += media }.keyboardShortcut(.defaultAction)
+            Button("Delete Originals", role: .destructive) {
+                originalsToDelete.formUnion(media)
+                pages[0].media += media
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("The library will keep a copy. Delete the selected files from their original locations when you save?")
+        }
         .task { await Task.yield(); focused = pages.first(where: { $0.info == nil })?.id }
         .onExitCommand { if !favorites.saving { favorites.draft = nil } }
         .accessibilityAddTraits(.isModal)
@@ -1268,6 +1295,7 @@ private struct FavoriteEditorRow: View {
     let player: PlayerModel
     let remove: () -> Void
     @State private var details: MediaDetails?
+    @State private var hasSubtitles = false
 
     var body: some View {
         let item = MediaItem(url: url)
@@ -1310,6 +1338,12 @@ private struct FavoriteEditorRow: View {
                     .monospacedDigit().foregroundStyle(.secondary).fixedSize()
             }
             Text(titleMismatch ? item.title : title).lineLimit(1).truncationMode(.middle).help(url.lastPathComponent)
+            if hasSubtitles {
+                Text("Sub").font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .glassEffect(.regular, in: Capsule()).fixedSize()
+                    .help("Linked external subtitles").accessibilityLabel("Linked external subtitles")
+            }
             if let warning {
                 Image(systemName: "exclamationmark.triangle").foregroundStyle(.yellow)
                     .help(warning).accessibilityLabel(warning)
@@ -1324,6 +1358,14 @@ private struct FavoriteEditorRow: View {
                 .buttonBorderShape(.circle).controlSize(.mini).help("Remove File from This Item").accessibilityLabel("Remove \(url.lastPathComponent) from This Item")
         }
         .frame(height: 22)
+        .task(id: url) {
+            hasSubtitles = false
+            guard url.isFileURL, !item.isImage else { return }
+            let found = await Task.detached(priority: .utility) {
+                !MediaItem.subtitleFiles(for: url).isEmpty
+            }.value
+            if !Task.isCancelled { hasSubtitles = found }
+        }
         .task(id: [player.engineVersion, info?.mediaType.rawValue, url.absoluteString]) {
             guard info != nil, isVideo, details == nil, player.engineVersion != nil, let engine = player.engine else { return }
             let loaded = await engine.details(of: url)

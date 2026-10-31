@@ -727,7 +727,7 @@ final class VLC: @unchecked Sendable {
         engine?.send(command)
     }
 
-    func saveProgress(relocating urls: [URL: URL] = [:]) {
+    func saveProgress(relocating urls: [URL: URL] = [:], copying: Set<URL> = []) {
         if urls.isEmpty {
             guard let current, !current.isImage, didStart, [3, 4, 6].contains(state), seekable || state == 6 else { return }
             let length = duration > 0 ? duration : current.duration ?? 0
@@ -740,7 +740,8 @@ final class VLC: @unchecked Sendable {
             progress[current.url] = saved
         } else {
             for (source, destination) in urls {
-                if let saved = progress.removeValue(forKey: source) { progress[destination] = saved }
+                if let saved = progress[source] { progress[destination] = saved }
+                if !copying.contains(source) { progress[source] = nil }
             }
         }
         // Every save encodes the whole list, so drop the oldest entry past the limit.

@@ -23,7 +23,7 @@ enum Library {
         return url.pathExtension.isEmpty ? hash : hash + "." + url.pathExtension.lowercased()
     }
 
-    // Imports leave symlinks at the original paths. Use the library file, so progress and subtitles match.
+    // Older imports left symlinks. Use the library file, so progress and subtitles match.
     static func resolve(_ url: URL) -> URL {
         guard url.isFileURL else { return url }
         let resolved = url.resolvingSymlinksInPath()
@@ -56,7 +56,7 @@ actor LibraryStore {
         try database.run("BEGIN IMMEDIATE")
         do {
             let version = try database.run("PRAGMA user_version").first?.first ?? nil
-            guard version == "0" || version == "1" || version == "2" || version == "3" || version == "4" else {
+            guard let version, let number = Int(version), (0...5).contains(number) else {
                 throw CocoaError(.fileReadUnknown, userInfo: [NSLocalizedDescriptionKey: "This library requires a newer version of Verc."])
             }
             if version == "0" {
@@ -98,12 +98,17 @@ actor LibraryStore {
                     try database.run("ALTER TABLE \(table) RENAME COLUMN page_id TO item_id")
                 }
             }
-            if version != "3" && version != "4" {
+            if number < 3 {
                 // Imported files keep their original paths, so removing an item can move them back.
                 try database.run("CREATE TABLE origins (destination TEXT PRIMARY KEY, source TEXT NOT NULL, media TEXT NOT NULL)")
             }
-            if version != "0" && version != "4" { try database.run("ALTER TABLE items ADD COLUMN credits TEXT") }
-            if version != "4" { try database.run("PRAGMA user_version = 4") }
+            if number > 0 && number < 4 { try database.run("ALTER TABLE items ADD COLUMN credits TEXT") }
+            if number < 5 {
+                for table in ["imports", "origins"] {
+                    try database.run("ALTER TABLE \(table) ADD COLUMN copied INTEGER NOT NULL DEFAULT 0")
+                }
+                try database.run("PRAGMA user_version = 5")
+            }
             if files.fileExists(atPath: journal.path) {
                 let committed = Set(try database.read().flatMap(\.media))
                 for move in try PropertyListDecoder().decode([Move].self, from: Data(contentsOf: journal)) where !committed.contains(move.media) {
@@ -156,10 +161,11 @@ actor LibraryStore {
         return pages
     }
 
-    func save(_ input: [FavoritePage], importing: Set<UUID> = []) throws -> [FavoritePage] {
+    func save(_ input: [FavoritePage], importing: Set<UUID> = [], moving: Set<URL> = []) throws -> [FavoritePage] {
         let files = FileManager.default
         let database = try database()
         var pages = input
+        var moving = moving
         var moves: [Move] = []
         var reserved = Set<String>()
         var movedSubtitles = Set<URL>()
@@ -211,6 +217,7 @@ actor LibraryStore {
                             throw CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: url.path])
                         }
                         moves.append(Move(source: subtitle, destination: url, media: destination))
+                        if moving.contains(source) { moving.insert(subtitle) }
                     }
                 }
                 if let background = pages[index].background, background.isFileURL,
@@ -224,7 +231,7 @@ actor LibraryStore {
             }
             pages[index].cachedArtwork = localArtwork(pages[index])
         }
-        // Commit the move list before touching files, so an interrupted import can restore its source files.
+        // Record transfers before touching files, so interrupted imports can recover.
         var journal: String?
         if !moves.isEmpty {
             let prefix = root.resolvingSymlinksInPath().path + "/"
@@ -237,7 +244,8 @@ actor LibraryStore {
             do {
                 journal = try database.run("SELECT COALESCE(MAX(position), 0) FROM imports").first?.first ?? nil
                 for move in moves {
-                    try database.run("INSERT INTO imports (source, destination) VALUES (?, ?)", [move.source.absoluteString, database.relativeURL(move.destination)])
+                    try database.run("INSERT INTO imports (source, destination, copied) VALUES (?, ?, ?)",
+                                     [move.source.absoluteString, database.relativeURL(move.destination), moving.contains(move.source) ? "0" : "1"])
                 }
                 try database.run("COMMIT")
             } catch {
@@ -248,10 +256,10 @@ actor LibraryStore {
         do {
             try database.run("BEGIN IMMEDIATE")
             for move in moves {
-                try files.moveItem(at: move.source, to: move.destination)
-                try files.createSymbolicLink(at: move.source, withDestinationURL: move.destination)
-                try database.run("INSERT OR REPLACE INTO origins VALUES (?, ?, ?)",
-                                 [database.relativeURL(move.destination), move.source.absoluteString, database.relativeURL(move.media)])
+                if moving.contains(move.source) { try files.moveItem(at: move.source, to: move.destination) }
+                else { try files.copyItem(at: move.source, to: move.destination) }
+                try database.run("INSERT OR REPLACE INTO origins VALUES (?, ?, ?, ?)",
+                                 [database.relativeURL(move.destination), move.source.absoluteString, database.relativeURL(move.media), moving.contains(move.source) ? "0" : "1"])
             }
             try database.write(pages)
             if let journal { try database.run("DELETE FROM imports WHERE position > ?", [journal]) }
@@ -268,14 +276,14 @@ actor LibraryStore {
     // Moves files of interrupted imports and removed media back. A failed move stays recorded and runs again later.
     private func recover(_ database: LibraryDatabase) {
         let files = FileManager.default
-        for row in (try? database.run("SELECT position, source, destination FROM imports ORDER BY position DESC")) ?? [] {
+        for row in (try? database.run("SELECT position, source, destination, copied FROM imports ORDER BY position DESC")) ?? [] {
             guard let source = row[1].flatMap(URL.init(string:)), let destination = try? row[2].map(database.absoluteURL),
-                  (try? restore(source, from: destination, copy: true)) != nil else { continue }
+                  (try? restore(source, from: destination, copied: row[3] == "1", interrupted: true)) != nil else { continue }
             _ = try? database.run("DELETE FROM imports WHERE position = ?", [row[0]])
         }
-        for row in (try? database.run("SELECT destination, source FROM origins WHERE media NOT IN (SELECT url FROM media)")) ?? [] {
+        for row in (try? database.run("SELECT destination, source, copied FROM origins WHERE media NOT IN (SELECT url FROM media)")) ?? [] {
             guard let destination = try? row[0].map(database.absoluteURL), let source = row[1].flatMap(URL.init(string:)),
-                  (try? restore(source, from: destination, copy: false)) != nil else { continue }
+                  (try? restore(source, from: destination, copied: row[2] == "1", interrupted: false)) != nil else { continue }
             _ = try? database.run("DELETE FROM origins WHERE destination = ?", [row[0]])
         }
         // Delete folders of removed items. Keep a folder that still holds anything except cached artwork.
@@ -288,13 +296,15 @@ actor LibraryStore {
         }
     }
 
-    private func restore(_ source: URL, from destination: URL, copy: Bool) throws {
+    private func restore(_ source: URL, from destination: URL, copied: Bool, interrupted: Bool) throws {
         let files = FileManager.default
         guard files.fileExists(atPath: destination.path) else { return }
-        if (try? files.destinationOfSymbolicLink(atPath: source.path)) == destination.path { try files.removeItem(at: source) }
-        if !files.fileExists(atPath: source.path) {
+        if !copied, (try? files.destinationOfSymbolicLink(atPath: source.path)) == destination.path { try files.removeItem(at: source) }
+        if copied && interrupted {
+            try files.removeItem(at: destination)
+        } else if !files.fileExists(atPath: source.path) {
             try files.moveItem(at: destination, to: source)
-        } else if copy {
+        } else if copied || interrupted {
             // A move does not change its source until it completes, so this destination is a partial or extra copy.
             try files.removeItem(at: destination)
         } else { throw CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: source.path]) }
