@@ -323,7 +323,7 @@ struct ContentView: View {
                             } label: {
                                 HStack(spacing: 12) {
                                     if let artwork = item.artwork {
-                                        FavoriteArtwork(url: artwork, symbol: "film", symbolSize: 16)
+                                        FavoriteArtwork(url: artwork, symbol: "film", symbolSize: 16, maxPixelSize: 160)
                                             .frame(width: 56, height: 32)
                                             .clipShape(RoundedRectangle(cornerRadius: 5))
                                             .overlay {
@@ -528,10 +528,7 @@ struct ContentView: View {
                 if player.subtitleID != -1 {
                     HStack(spacing: 8) {
                         Text("Font").frame(width: 64, alignment: .leading)
-                        Picker("Subtitle Font", selection: $player.subtitleFont) {
-                            ForEach(PlayerModel.subtitleFonts, id: \.self) { Text($0).tag($0) }
-                        }
-                        .labelsHidden().buttonSizing(.flexible).frame(maxWidth: .infinity, alignment: .leading)
+                        SubtitleFontPicker(player: player)
                     }
                     HStack(spacing: 8) {
                         Text("Font Size").frame(width: 64, alignment: .leading)
@@ -632,6 +629,18 @@ private struct PlaylistTime: View {
     }
 }
 
+/// Reads only the font, so slider steps in the same popover do not rebuild the long list of font families.
+private struct SubtitleFontPicker: View {
+    @Bindable var player: PlayerModel
+
+    var body: some View {
+        Picker("Subtitle Font", selection: $player.subtitleFont) {
+            ForEach(PlayerModel.subtitleFonts, id: \.self) { Text($0).tag($0) }
+        }
+        .labelsHidden().buttonSizing(.flexible).frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 /// Reads `player.time` on its own so position updates redraw only the timeline, not the whole player.
 private struct Timeline: View {
     let player: PlayerModel
@@ -709,7 +718,7 @@ private struct CreditsPopover<Content: View>: NSViewRepresentable {
 
     @MainActor final class Coordinator: NSObject, NSWindowDelegate {
         var isPresented: Binding<Bool>
-        let panel = CreditsPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        let panel = CreditsPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
         var monitor: Any?
         var resizeObserver: Any?
 
@@ -730,6 +739,8 @@ private struct CreditsPopover<Content: View>: NSViewRepresentable {
         func windowDidResignKey(_ notification: Notification) { isPresented.wrappedValue = false }
 
         func close() {
+            // Every update of a hidden popover calls this, so skip the window work when nothing is shown.
+            guard panel.isVisible || panel.contentView != nil || monitor != nil || resizeObserver != nil else { return }
             if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
             if let resizeObserver { NotificationCenter.default.removeObserver(resizeObserver); self.resizeObserver = nil }
             if panel.isKeyWindow { panel.parent?.makeKey() }

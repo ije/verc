@@ -139,7 +139,7 @@ vertex LightVertex lightVertex(uint id [[vertex_id]], const device packed_float3
         uint samples = s.layout.z;
         float coordinate = float(min(spectral, samples - 1)) * 127.0 / float(max(samples - 1, 1u));
         uint lower = min(uint(floor(coordinate)), 126u);
-        color = mix(spectrum[lower], spectrum[lower + 1], fract(coordinate)).rgb;
+        color = mix(spectrum[lower], spectrum[lower + 1], coordinate - float(lower)).rgb;
     }
     return { s.viewProjection * float4(data.xy, s.prism[1].w, 1), color, profile, max(data.z, 0.0), travel, revealProfile };
 }

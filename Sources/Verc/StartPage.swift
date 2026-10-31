@@ -426,7 +426,7 @@ struct StartPage: View {
                 if !favorites.showAllMedia, let anchor, let page = favorites.pages.first(where: { $0.id == tooltip }), let poster = page.info?.posterURL {
                     GeometryReader { proxy in
                         let dot = proxy[anchor]
-                        FavoriteArtwork(url: page.artworkURL(poster), background: true)
+                        FavoriteArtwork(url: page.artworkURL(poster), background: true, maxPixelSize: 320)
                             .frame(width: 96, height: 144).clipShape(RoundedRectangle(cornerRadius: 6))
                             .padding(6).padding(.bottom, 8)
                             .glassEffect(.regular.tint(.black.opacity(0.2)), in: ArrowOutline(top: false, depth: 8, radius: 10))
@@ -587,7 +587,7 @@ private struct FavoriteLibrary: View {
                                 ZStack {
                                     Rectangle().fill(.white.opacity(0.06))
                                     if let poster = page.info?.posterURL {
-                                        FavoriteArtwork(url: page.artworkURL(poster))
+                                        FavoriteArtwork(url: page.artworkURL(poster), maxPixelSize: 720)
                                     } else {
                                         Image(systemName: "rectangle.stack").font(.system(size: 36, weight: .ultraLight))
                                             .foregroundStyle(.secondary)
@@ -663,17 +663,21 @@ private struct FavoriteGallery: View {
                 }
                 ScrollView(.horizontal) {
                     LazyHStack(alignment: .top, spacing: 32) {
+                        let latest = page.media.lazy.filter { player.progress[$0] != nil }.max {
+                            (player.progress[$0]?.date ?? .distantPast) < (player.progress[$1]?.date ?? .distantPast)
+                        }
                         if let info = page.info {
                             let height = width * 9 / 16
                             let posterWidth = info.posterURL == nil ? 0 : height * 2 / 3 + height * 0.05 + 40
-                            FavoriteDetails(page: page, info: info, player: player, height: height,
+                            FavoriteDetails(page: page, info: info, player: player, latest: latest, height: height,
                                             infoWidth: min(640, max(280, geometry.size.width * 0.48),
                                                            geometry.size.width - 80 - posterWidth - (page.media.isEmpty ? 0 : 32 + 96)))
                                 .id(info.url)
                         }
                         ForEach(page.media, id: \.self) { url in
                             let item = MediaItem(url: url)
-                            FavoriteMediaCard(item: item, title: page.title(for: url), artwork: page.artwork(for: url), player: player, width: width) {
+                            FavoriteMediaCard(item: item, title: page.title(for: url), artwork: page.artwork(for: url), player: player,
+                                              lastPlayed: page.media.count > 1 && url == latest, width: width) {
                                 player.add(page.media, startingAt: url, page: page)
                             }
                         }
@@ -708,6 +712,7 @@ private struct FavoriteDetails: View {
     let page: FavoritePage
     let info: TMDBTitle
     let player: PlayerModel
+    let latest: URL?
     let height: CGFloat
     let infoWidth: CGFloat
     @State private var textHeight: CGFloat = 0
@@ -769,9 +774,6 @@ private struct FavoriteDetails: View {
                 }
                 .frame(idealHeight: textHeight, maxHeight: textHeight == 0 ? nil : textHeight)
                 HStack(spacing: 12) {
-                    let latest = page.media.lazy.filter { player.progress[$0] != nil }.max {
-                        (player.progress[$0]?.date ?? .distantPast) < (player.progress[$1]?.date ?? .distantPast)
-                    }
                     if let url = latest ?? page.media.first {
                         let saved = player.progress[url]
                         let label = (saved?.time ?? 0) > 0 && saved?.finished == false ? "Resume" : "Play"
@@ -815,6 +817,7 @@ private struct FavoriteMediaCard: View {
     let title: String
     let artwork: URL?
     let player: PlayerModel
+    let lastPlayed: Bool
     let width: CGFloat
     let open: () -> Void
     @State private var preview: MediaPreview?
@@ -832,7 +835,7 @@ private struct FavoriteMediaCard: View {
                                 loading: artwork == nil && preview == nil && player.engineError == nil)
                     .frame(width: width, height: width * 9 / 16)
                     .clipShape(RoundedRectangle(cornerRadius: 24))
-                    .modifier(PlaybackBadges(item: item, progress: progress, duration: preview?.duration ?? progress?.duration, hovered: hovered, inset: 18))
+                    .modifier(PlaybackBadges(item: item, lastPlayed: lastPlayed, duration: preview?.duration ?? progress?.duration, hovered: hovered, inset: 18))
                 Text(title).font(.system(size: 14, weight: .semibold)).lineLimit(1)
                     .padding(.horizontal, 4)
             }
@@ -858,7 +861,7 @@ private struct FavoriteMediaCard: View {
 
 private struct PlaybackBadges: ViewModifier {
     let item: MediaItem
-    let progress: PlaybackProgress?
+    let lastPlayed: Bool
     let duration: Double?
     let hovered: Bool
     let inset: CGFloat
@@ -866,9 +869,9 @@ private struct PlaybackBadges: ViewModifier {
     func body(content: Content) -> some View {
         content
             .overlay(alignment: .topLeading) {
-                if !item.isImage, let progress, progress.finished || progress.time > 0 {
-                    Text(progress.finished ? "Finished" : "Played to \(timeLabel(progress.time))")
-                        .font(.system(size: 11, weight: .medium)).monospacedDigit().foregroundStyle(.white)
+                if lastPlayed {
+                    Text("Last Played")
+                        .font(.system(size: 11, weight: .medium)).foregroundStyle(.white)
                         .padding(.horizontal, 10).padding(.vertical, 6)
                         .glassEffect(.regular, in: Capsule())
                         .padding(inset)
@@ -903,12 +906,13 @@ struct FavoriteArtwork: View {
     var loading = false
     var symbol: String?
     var symbolSize: CGFloat = 48
+    var maxPixelSize = 2560
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var backgroundImage: CGImage?
     @State private var loadingArtwork = false
-    private static var loads: [URL: Task<CGImage?, Never>] = [:]
-    private static let cache: NSCache<NSURL, CGImage> = {
-        let cache = NSCache<NSURL, CGImage>()
+    private static var loads: [String: Task<CGImage?, Never>] = [:]
+    private static let cache: NSCache<NSString, CGImage> = {
+        let cache = NSCache<NSString, CGImage>()
         cache.totalCostLimit = 64 * 1024 * 1024
         return cache
     }()
@@ -936,11 +940,14 @@ struct FavoriteArtwork: View {
             if !crossfade { backgroundImage = nil }
             loadingArtwork = false
             guard background || !url.isFileURL || url.deletingLastPathComponent().lastPathComponent == "Artwork" else { return }
-            if let cached = Self.cache.object(forKey: url as NSURL) { backgroundImage = cached; return }
+            // Small views decode small images, so their thumbnails do not push large backdrops out of the cache.
+            let key = "\(maxPixelSize) \(url.absoluteString)" as NSString
+            if let cached = Self.cache.object(forKey: key) { backgroundImage = cached; return }
             loadingArtwork = true
             defer { if !Task.isCancelled { loadingArtwork = false } }
-            if Self.loads[url] == nil {
-                Self.loads[url] = Task.detached(priority: .utility) {
+            if Self.loads[key as String] == nil {
+                let size = maxPixelSize
+                Self.loads[key as String] = Task.detached(priority: .utility) {
                     let source: CGImageSource?
                     if url.isFileURL { source = CGImageSourceCreateWithURL(url as CFURL, nil) }
                     else {
@@ -948,13 +955,13 @@ struct FavoriteArtwork: View {
                               (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
                         source = CGImageSourceCreateWithData(data as CFData, nil)
                     }
-                    return thumbnail(source, maxPixelSize: 2560)
+                    return thumbnail(source, maxPixelSize: size)
                 }
             }
-            let result = await Self.loads[url]?.value
-            Self.loads[url] = nil
+            let result = await Self.loads[key as String]?.value
+            Self.loads[key as String] = nil
             guard let result else { return }
-            Self.cache.setObject(result, forKey: url as NSURL, cost: result.bytesPerRow * result.height)
+            Self.cache.setObject(result, forKey: key, cost: result.bytesPerRow * result.height)
             if !Task.isCancelled { backgroundImage = result }
         }
     }
@@ -974,6 +981,7 @@ struct FavoriteEditor: View {
     @State private var lookupStatus: [UUID: (message: String, retry: Bool)] = [:]
     @State private var lookupAttempt = 0
     @State private var resolvedInputs: [UUID: [String]] = [:]
+    @State private var subtitled: Set<URL> = []
     @FocusState private var focused: UUID?
 
     var body: some View {
@@ -1000,7 +1008,7 @@ struct FavoriteEditor: View {
                 if let info = page.info {
                     HStack(alignment: .top, spacing: 12) {
                         if let poster = info.posterURL {
-                            FavoriteArtwork(url: page.artworkURL(poster), background: true).frame(width: 52, height: 78).clipShape(RoundedRectangle(cornerRadius: 6))
+                            FavoriteArtwork(url: page.artworkURL(poster), background: true, maxPixelSize: 160).frame(width: 52, height: 78).clipShape(RoundedRectangle(cornerRadius: 6))
                         }
                         VStack(alignment: .leading, spacing: 4) {
                             Text(info.title).font(.system(size: 13, weight: .semibold))
@@ -1078,7 +1086,8 @@ struct FavoriteEditor: View {
                         episodes[numbers[0]] = max(episodes[numbers[0]] ?? 0, numbers[1])
                     }
                     ForEach(page.media, id: \.self) { url in
-                        FavoriteEditorRow(url: url, info: page.info, title: page.title(for: url), lastEpisodes: lastEpisodes, player: player) {
+                        FavoriteEditorRow(url: url, info: page.info, title: page.title(for: url), lastEpisodes: lastEpisodes,
+                                          hasSubtitles: subtitled.contains(url), player: player) {
                             page.media.removeAll { $0 == url }
                             originalsToDelete.remove(url)
                         }
@@ -1224,6 +1233,12 @@ struct FavoriteEditor: View {
             Text("The library will keep a copy. Delete the selected files from their original locations when you save?")
         }
         .task { await Task.yield(); focused = pages.first(where: { $0.info == nil })?.id }
+        .task(id: pages.flatMap(\.media)) {
+            let media = pages.flatMap(\.media).filter { !MediaItem(url: $0).isImage }
+            let search = Task.detached(priority: .utility) { MediaItem.subtitleFiles(for: media) { Task.isCancelled } }
+            let found = await withTaskCancellationHandler { await search.value } onCancel: { search.cancel() }
+            if !Task.isCancelled { subtitled = Set(found.filter { !$0.value.isEmpty }.keys) }
+        }
         .onExitCommand { if !favorites.saving { favorites.draft = nil } }
         .accessibilityAddTraits(.isModal)
         .task(id: [String(lookupAttempt)] + pages.flatMap { [$0.id.uuidString] + $0.lookupKey }) {
@@ -1292,10 +1307,10 @@ private struct FavoriteEditorRow: View {
     let info: TMDBTitle?
     let title: String
     let lastEpisodes: [Int: Int]
+    let hasSubtitles: Bool
     let player: PlayerModel
     let remove: () -> Void
     @State private var details: MediaDetails?
-    @State private var hasSubtitles = false
 
     var body: some View {
         let item = MediaItem(url: url)
@@ -1358,14 +1373,6 @@ private struct FavoriteEditorRow: View {
                 .buttonBorderShape(.circle).controlSize(.mini).help("Remove File from This Item").accessibilityLabel("Remove \(url.lastPathComponent) from This Item")
         }
         .frame(height: 22)
-        .task(id: url) {
-            hasSubtitles = false
-            guard url.isFileURL, !item.isImage else { return }
-            let found = await Task.detached(priority: .utility) {
-                !MediaItem.subtitleFiles(for: url).isEmpty
-            }.value
-            if !Task.isCancelled { hasSubtitles = found }
-        }
         .task(id: [player.engineVersion, info?.mediaType.rawValue, url.absoluteString]) {
             guard info != nil, isVideo, details == nil, player.engineVersion != nil, let engine = player.engine else { return }
             let loaded = await engine.details(of: url)

@@ -169,6 +169,7 @@ actor LibraryStore {
         var moves: [Move] = []
         var reserved = Set<String>()
         var movedSubtitles = Set<URL>()
+        let subtitleFiles = MediaItem.subtitleFiles(for: pages.filter { importing.contains($0.id) }.flatMap(\.media))
         for index in pages.indices {
             pages[index].libraryURL = root
             if let directory = pages[index].directory {
@@ -210,7 +211,7 @@ actor LibraryStore {
                     let sourceFolder = source.deletingLastPathComponent().resolvingSymlinksInPath()
                     let subtitles = destination.deletingLastPathComponent().appendingPathComponent("Subs", isDirectory: true)
                         .appendingPathComponent(destination.lastPathComponent, isDirectory: true)
-                    for subtitle in MediaItem.subtitleFiles(for: source)
+                    for subtitle in subtitleFiles[source, default: []]
                     where (try? subtitle.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true && movedSubtitles.insert(subtitle).inserted {
                         let url = subtitles.appendingPathComponent(String(subtitle.path.dropFirst(sourceFolder.path.count + 1)))
                         guard !files.fileExists(atPath: url.path), reserved.insert(url.path.lowercased()).inserted else {
@@ -356,8 +357,9 @@ actor LibraryStore {
         do {
             let (temporary, response) = try await URLSession.shared.download(for: URLRequest(url: url, timeoutInterval: 15))
             defer { try? FileManager.default.removeItem(at: temporary) }
+            // ImageIO creates a source for any file, such as a captive portal page, so check that it holds an image.
             guard (response as? HTTPURLResponse)?.statusCode == 200,
-                  CGImageSourceCreateWithURL(temporary as CFURL, nil) != nil else { return nil }
+                  (CGImageSourceCreateWithURL(temporary as CFURL, nil).map(CGImageSourceGetCount) ?? 0) > 0 else { return nil }
             try FileManager.default.moveItem(at: temporary, to: destination)
             return (url.absoluteString, name)
         } catch { return nil }

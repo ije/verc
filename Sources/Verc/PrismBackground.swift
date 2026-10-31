@@ -341,10 +341,10 @@ private final class PrismResources: @unchecked Sendable {
 
     func invalidate() { sceneDirty = true }
 
-    private func ease(_ current: inout Vec, _ target: Vec, _ amount: Double) -> Bool {
+    private func ease(_ current: inout Vec, _ target: Vec, _ amount: Double, snap: Double) -> Bool {
         if current == target { return false }
         let delta = target - current
-        current = abs(delta.x) < 1e-4 && abs(delta.y) < 1e-4 ? target : current + delta * amount
+        current = abs(delta.x) < snap && abs(delta.y) < snap ? target : current + delta * amount
         return true
     }
 
@@ -359,9 +359,10 @@ private final class PrismResources: @unchecked Sendable {
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) { invalidate() }
 
     func draw(in view: MTKView) {
-        guard let resources, let drawable = view.currentDrawable else { return }
+        guard let resources else { return }
+        // Wait before taking a drawable, so a blocked frame does not hold one of the few drawables.
         inFlight.wait()
-        guard let command = resources.queue.makeCommandBuffer() else { inFlight.signal(); return }
+        guard let drawable = view.currentDrawable, let command = resources.queue.makeCommandBuffer() else { inFlight.signal(); return }
         command.addCompletedHandler { [inFlight] _ in inFlight.signal() }
         encode(command, resources, output: drawable.texture, now: CACurrentMediaTime())
         command.present(drawable)
@@ -377,8 +378,9 @@ private final class PrismResources: @unchecked Sendable {
         }
         guard let targets else { return }
         if started == nil { started = now }
-        let aimed = ease(&aim, aimTarget, 0.12)
-        let orbited = ease(&orbit, orbitTarget, 0.08)
+        let aimed = ease(&aim, aimTarget, 0.12, snap: 1e-4)
+        // Orbit steps below 3e-3 move the image less than a pixel, so stop there instead of rendering identical frames.
+        let orbited = ease(&orbit, orbitTarget, 0.08, snap: 3e-3)
         let progress = revealProgress(at: now)
         let dustTime = reduceMotion ? 0 : Float((floor((now - started!) * 30) / 30).truncatingRemainder(dividingBy: 3600))
         uniforms.timing = SIMD4(dustTime, progress.opacity, progress.beam, 0)

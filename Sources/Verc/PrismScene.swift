@@ -101,7 +101,12 @@ enum PrismScene {
         guard let entry = intersect(origin, direction, minimum: 1e-4), simd_dot(direction, entry.normal) < 0,
               var inside = refract(direction, entry.normal, 1 / ior) else { return nil }
         var position = origin + direction * entry.t
-        var points = [position], edges = [entry.edge]
+        // Reserve the longest path. Array growth here costs about 20% of each light rebuild.
+        var points = [Vec](), edges = [Int]()
+        points.reserveCapacity(maxBounces + 2)
+        edges.reserveCapacity(maxBounces + 2)
+        points.append(position)
+        edges.append(entry.edge)
         let entryTransmission = transmittance(direction, entry.normal, 1, ior)
         for _ in 0...maxBounces {
             guard let exit = intersect(position, inside, minimum: 1e-4) else { return nil }
