@@ -120,9 +120,14 @@ enum RepeatMode: String, CaseIterable {
     case off = "Off", all = "All", one = "One"
 }
 
+// Raw values match libvlc_state_t. libVLC does not report failed for every failure, so the VLC wrapper sets it.
+enum PlaybackState: Int32, Sendable {
+    case idle, opening, buffering, playing, paused, stopped, ended, failed
+}
+
 struct PlaybackSnapshot: Sendable {
     let id: UUID
-    let state: Int32
+    let state: PlaybackState
     let time: Double
     let duration: Double
     let seekable: Bool
@@ -224,9 +229,14 @@ final class VLC: @unchecked Sendable {
         default: 0
         }
         if case let .open(url, id, time) = command {
+            let current: @Sendable () -> Bool = { [self] in requests.load(ordering: .relaxed) == request }
+            // Stop the previous media now. It would play, and take the commands for the new media, until the search ends.
+            queue.async { [self] in
+                if !closed.load(ordering: .relaxed), let handle, current() { vc_stop(handle) }
+            }
             // The subtitle search can take seconds on a network volume, so it runs before the playback queue.
             searchQueue.async { [self] in
-                let current: @Sendable () -> Bool = { [self] in requests.load(ordering: .relaxed) == request }
+                guard current() else { return }
                 // VLC loads the subtitles next to the media by itself.
                 let folder = url.deletingLastPathComponent().resolvingSymlinksInPath().path
                 let found = (MediaItem(url: url).isImage ? [:] : MediaItem.subtitleFiles(for: [url]) { !current() })[url, default: []]
@@ -354,17 +364,17 @@ final class VLC: @unchecked Sendable {
             if let head { vc_free_tracks(handle, head) }
             groups.append(tracks)
         }
-        var state = vc_state(handle)
-        if state == 6 && vc_failed(handle) != 0 { state = 7 }
+        var state = PlaybackState(rawValue: vc_state(handle)) ?? .idle
+        if state == .ended && vc_failed(handle) != 0 { state = .failed }
         let time = max(0, Double(vc_time(handle)) / 1000)
         let duration = max(0, Double(vc_duration(handle)) / 1000)
         let seekable = vc_seekable(handle) != 0
         // VLC 3 can remain in the playing state at EOF after an external subtitle is attached.
-        if externalSubtitles && state == 3 && seekable && duration > 0 && time >= duration {
+        if externalSubtitles && state == .playing && seekable && duration > 0 && time >= duration {
             let now = DispatchTime.now().uptimeNanoseconds
             if let endTime, now - endTime >= 2_000_000_000 {
                 vc_stop(handle)
-                state = 6
+                state = .ended
             } else if endTime == nil { endTime = now }
         } else { endTime = nil }
         onUpdate?(PlaybackSnapshot(
@@ -374,13 +384,13 @@ final class VLC: @unchecked Sendable {
             audio: groups[0], subtitles: groups[1],
             audioID: vc_selected_track(handle, 0), subtitleID: vc_selected_track(handle, 1)
         ))
-        if state == 6 || state == 7 { timer?.schedule(deadline: .distantFuture) }
+        if state == .ended || state == .failed { timer?.schedule(deadline: .distantFuture) }
     }
 
     func saveFrame(to url: URL, id: UUID) async throws -> CGImage? {
         try await withCheckedThrowingContinuation { continuation in
             queue.async { [self] in
-                guard !closed.load(ordering: .relaxed), let handle, mediaID == id, [3, 4].contains(vc_state(handle)) else {
+                guard !closed.load(ordering: .relaxed), let handle, mediaID == id, [.playing, .paused].contains(PlaybackState(rawValue: vc_state(handle))) else {
                     continuation.resume(returning: nil)
                     return
                 }
@@ -406,6 +416,8 @@ final class VLC: @unchecked Sendable {
     func details(of url: URL) async -> MediaDetails {
         if let cached = mediaDetails.object(forKey: url as NSURL) { return cached }
         return await metadata(MediaDetails()) { [self] handle in
+            // Requests wait in a serial queue, so an earlier one can have read this file.
+            if let cached = mediaDetails.object(forKey: url as NSURL) { return cached }
             let info = vc_read_media_info(handle, url.absoluteString)
             let details = MediaDetails(duration: info.duration > 0 ? Double(info.duration) / 1000 : nil, width: info.width, height: info.height,
                                        subtitleCount: info.subtitleCount >= 0 ? Int(info.subtitleCount) : nil)
@@ -427,8 +439,9 @@ final class VLC: @unchecked Sendable {
             let video = item.isVideo
             let cancelled = Mutex(false)
             preview = await withTaskCancellationHandler {
-                await metadata(MediaPreview(), on: previewQueue) { handle in
+                await metadata(MediaPreview(), on: previewQueue) { [self] handle in
                     guard !cancelled.withLock({ $0 }) else { return MediaPreview() }
+                    if let cached = previews.object(forKey: url as NSURL) { return cached }
                     var result = vc_read_preview(handle, url.absoluteString, video ? 1 : 0)
                     defer { vc_free_preview(&result) }
                     var image: CGImage?
@@ -505,7 +518,7 @@ final class VLC: @unchecked Sendable {
     private(set) var playlist: [MediaItem] = []
     private(set) var playlistTitle: String?
     private(set) var progress: [URL: PlaybackProgress] = [:]
-    var state: Int32 = 0
+    var state = PlaybackState.idle
     var time = 0.0
     var duration = 0.0
     var seekable = false
@@ -561,7 +574,9 @@ final class VLC: @unchecked Sendable {
     private var isSavingFrame = false
     @ObservationIgnored let videoView = NSView()
     @ObservationIgnored private(set) var engine: VLC?
-    @ObservationIgnored private var sleepActivity: NSObjectProtocol?
+    @ObservationIgnored private var sleepActivity: NSObjectProtocol? {
+        didSet { if let oldValue { ProcessInfo.processInfo.endActivity(oldValue) } }
+    }
     @ObservationIgnored private var didStart = false
     @ObservationIgnored private var playbackID = UUID()
     @ObservationIgnored private var pictureInPicture: PictureInPicture?
@@ -574,10 +589,10 @@ final class VLC: @unchecked Sendable {
     @ObservationIgnored private var lastProgressSave = Date.distantPast
     @ObservationIgnored private var sentCrop: String?
     var canPictureInPicture: Bool { isPictureInPicture || (current != nil && videoWidth > 0 && videoHeight > 0) }
-    var canSaveFrame: Bool { current?.isAudio == false && videoWidth > 0 && videoHeight > 0 && (state == 3 || state == 4) && !isSavingFrame }
-    var isPlaying: Bool { state == 3 }
-    var isLoading: Bool { current != nil && (state == 0 || state == 1 || state == 2) }
-    var playLabel: String { isPlaying ? "Pause" : state == 6 ? "Play Again" : "Play" }
+    var canSaveFrame: Bool { current?.isAudio == false && videoWidth > 0 && videoHeight > 0 && (state == .playing || state == .paused) && !isSavingFrame }
+    var isPlaying: Bool { state == .playing }
+    var isLoading: Bool { current != nil && [.idle, .opening, .buffering].contains(state) }
+    var playLabel: String { isPlaying ? "Pause" : state == .ended ? "Play Again" : "Play" }
     var pictureInPictureLabel: String { isPictureInPicture ? "Exit Picture in Picture" : "Enter Picture in Picture" }
     init() {
         if let data = UserDefaults.standard.data(forKey: "playbackProgress"),
@@ -626,7 +641,7 @@ final class VLC: @unchecked Sendable {
             send(.volume(muted ? 0 : volume))
         case let .failure(failure):
             engineError = failure.localizedDescription
-            if current != nil { state = 7; error = engineError }
+            if current != nil { state = .failed; error = engineError }
         }
         updateNowPlaying()
     }
@@ -656,7 +671,7 @@ final class VLC: @unchecked Sendable {
         if subtitleTracks != snapshot.subtitles { subtitleTracks = snapshot.subtitles }
         audioID = snapshot.audioID
         subtitleID = snapshot.subtitleID
-        if snapshot.state == 3 && !didStart {
+        if snapshot.state == .playing && !didStart {
             didStart = true
             send(.volume(muted ? 0 : volume))
             send(.rate(speed))
@@ -668,15 +683,12 @@ final class VLC: @unchecked Sendable {
         if isPlaying && sleepActivity == nil {
             // Audio keeps only the system awake, so the display can still sleep.
             sleepActivity = ProcessInfo.processInfo.beginActivity(options: current?.isAudio == true ? .userInitiated : [.userInitiated, .idleDisplaySleepDisabled], reason: "Playing media")
-        } else if !isPlaying, let activity = sleepActivity {
-            ProcessInfo.processInfo.endActivity(activity)
-            sleepActivity = nil
-        }
-        if state == 6 || (state == 4 && previous != 4) || (time > 0 && Date().timeIntervalSince(lastProgressSave) >= 5) {
+        } else if !isPlaying { sleepActivity = nil }
+        if state == .ended || (state == .paused && previous != .paused) || (time > 0 && Date().timeIntervalSince(lastProgressSave) >= 5) {
             saveProgress()
         }
-        if state == 6 && previous != 6 { advance() }
-        else if state == 7 && previous != 7 {
+        if state == .ended && previous != .ended { advance() }
+        else if state == .failed && previous != .failed {
             error = "Verc could not play this media. The file may be damaged, or the stream may be unavailable."
         }
         if changed { updateNowPlaying() }
@@ -691,7 +703,7 @@ final class VLC: @unchecked Sendable {
     }
 
     private func handleMediaCommand(_ command: MediaCommand, seconds: Double?) -> MPRemoteCommandHandlerStatus {
-        guard current?.isImage == false, state != 7 else { return .noActionableNowPlayingItem }
+        guard current?.isImage == false, state != .failed else { return .noActionableNowPlayingItem }
         switch command {
         case .play: if !isPlaying { togglePlay() }
         case .pause: send(.pause(true))
@@ -709,7 +721,7 @@ final class VLC: @unchecked Sendable {
 
     private func updateNowPlaying() {
         let commands = MPRemoteCommandCenter.shared()
-        let active = current?.isImage == false && state != 7
+        let active = current?.isImage == false && state != .failed
         let index = active ? playlist.firstIndex(where: { $0.id == current?.id }) : nil
         commands.playCommand.isEnabled = active
         commands.pauseCommand.isEnabled = active
@@ -740,7 +752,7 @@ final class VLC: @unchecked Sendable {
             info[MPNowPlayingInfoPropertyPlaybackQueueCount] = playlist.count
         }
         center.nowPlayingInfo = info
-        let playbackState: MPNowPlayingPlaybackState = isPlaying ? .playing : state == 4 ? .paused : .stopped
+        let playbackState: MPNowPlayingPlaybackState = isPlaying ? .playing : state == .paused ? .paused : .stopped
         if center.playbackState != playbackState { center.playbackState = playbackState }
     }
 
@@ -748,12 +760,17 @@ final class VLC: @unchecked Sendable {
         engine?.send(command)
     }
 
+    func selectTrack(_ id: Int32, subtitles: Bool) {
+        if subtitles { subtitleID = id } else { audioID = id }
+        send(.track(id, subtitles))
+    }
+
     func saveProgress(relocating urls: [URL: URL] = [:], copying: Set<URL> = []) {
         if urls.isEmpty {
-            guard let current, !current.isImage, didStart, [3, 4, 6].contains(state), seekable || state == 6 else { return }
+            guard let current, !current.isImage, didStart, [.playing, .paused, .ended].contains(state), seekable || state == .ended else { return }
             let length = duration > 0 ? duration : current.duration ?? 0
             guard length > 0 else { return }
-            var saved = PlaybackProgress(time: state == 6 ? length : min(time, length), duration: length, finished: state == 6)
+            var saved = PlaybackProgress(time: state == .ended ? length : min(time, length), duration: length, finished: state == .ended)
             var previous = progress[current.url]
             previous?.date = nil
             guard previous != saved else { return }
@@ -944,7 +961,7 @@ final class VLC: @unchecked Sendable {
         if current?.id != item.id && item.isAudio { endPictureInPicture() }
         current = item
         playbackID = UUID()
-        state = 1
+        state = .opening
         let saved = progress[item.url]
         if !restart, let saved, !saved.finished { time = min(saved.time, saved.duration) }
         else { time = 0 }
@@ -958,7 +975,7 @@ final class VLC: @unchecked Sendable {
         audioID = -1
         subtitleID = -1
         didStart = false
-        guard engineError == nil, let engine else { state = 7; error = engineError ?? "The playback engine is unavailable."; return }
+        guard engineError == nil, let engine else { state = .failed; error = engineError ?? "The playback engine is unavailable."; return }
         engine.send(.open(item.url, playbackID, time))
     }
 
@@ -980,7 +997,7 @@ final class VLC: @unchecked Sendable {
             openFiles()
             return
         }
-        if state == 6 || state == 7 || state == 5 { play(item, restart: true) }
+        if [.stopped, .ended, .failed].contains(state) { play(item, restart: true) }
         else { send(.pause(isPlaying)) }
     }
 
@@ -992,9 +1009,9 @@ final class VLC: @unchecked Sendable {
         if duration > 0 && time >= duration {
             // VLC can ignore seeks at EOF; reject old snapshots so the time stays at the end.
             playbackID = UUID()
-            state = 6
+            state = .ended
             seekable = false
-            if let activity = sleepActivity { ProcessInfo.processInfo.endActivity(activity); sleepActivity = nil }
+            sleepActivity = nil
             send(.stop)
             saveProgress()
             advance()
@@ -1011,7 +1028,7 @@ final class VLC: @unchecked Sendable {
         let ending = duration > 0 && seekTarget >= duration
         seek(to: seekTarget)
         // A seek to the end can start the next item, which must not count from this target.
-        guard !ending || state == 6 else { return }
+        guard !ending || state == .ended else { return }
         // Keep the offset's sign even when the move is zero, so the feedback shows the pressed direction at the ends.
         seekSeconds = Double(signOf: offset, magnitudeOf: seekTarget - seekOrigin)
         seekFeedbackTask = Task {
@@ -1044,11 +1061,11 @@ final class VLC: @unchecked Sendable {
         current = nil
         playlist = []
         playlistTitle = nil
-        state = 0
+        state = .idle
         time = 0
         duration = 0
         seekable = false
-        if let activity = sleepActivity { ProcessInfo.processInfo.endActivity(activity); sleepActivity = nil }
+        sleepActivity = nil
         updateNowPlaying()
     }
 }

@@ -15,6 +15,8 @@ Verc is a media player for Apple silicon and macOS 26+. It uses Swift 6, SwiftUI
 - `Sources/Verc/VercApp.swift`: app lifecycle, windows, menus, and keyboard shortcuts.
 - `Sources/Verc/Playback.swift`: media types, playlists, `PlayerModel`, and the VLC queue wrapper.
 - `Sources/Verc/ContentView.swift`: player interface and the shared video surface.
+- `Sources/Verc/Favorites.swift`, `Library.swift`, and `LibraryDatabase.swift`: library items, the `FavoritePages` store, file import, and the SQLite database.
+- `Sources/Verc/StartPage.swift`: start page, library, and item editor views.
 - `Sources/Verc/PictureInPicture.swift` and `SubtitleSurface.swift`: floating window and subtitle layout.
 - `Sources/Verc/PrismBackground.swift`, `PrismScene.swift`, and `Prism.metal`: Metal renderer, scene geometry, and shaders.
 - `Sources/VLC/`: C bridge and subtitle plugin. Public headers are in `include/`.
@@ -50,6 +52,7 @@ open dist/Verc.app
 ```
 
 The first build downloads VLC 3.0.24 and verifies its checksum. The script compiles the subtitle plugin and `Prism.metal` separately from SwiftPM.
+The script writes the VLC plugin cache after it signs the plugins. A later change to a plugin makes libVLC ignore the cache and open every plugin at launch.
 The app needs the bundled VLC runtime and resources. A plain `swift build` does not assemble the app bundle.
 
 For release or bundle changes, run `./scripts/build.sh`.

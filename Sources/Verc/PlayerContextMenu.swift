@@ -31,15 +31,9 @@ final class PlayerMenuView: NSView {
             if !subtitles.isEmpty {
                 subtitleItems += [
                     .separator(),
-                    PlayerMenuItem("Off", checked: player.subtitleID == -1) {
-                        player.subtitleID = -1
-                        player.send(.track(-1, true))
-                    }
+                    PlayerMenuItem("Off", checked: player.subtitleID == -1) { player.selectTrack(-1, subtitles: true) }
                 ] + subtitles.map { track in
-                    PlayerMenuItem(track.name, checked: player.subtitleID == track.id) {
-                        player.subtitleID = track.id
-                        player.send(.track(track.id, true))
-                    }
+                    PlayerMenuItem(track.name, checked: player.subtitleID == track.id) { player.selectTrack(track.id, subtitles: true) }
                 }
             }
             items += [

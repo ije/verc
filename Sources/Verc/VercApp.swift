@@ -148,10 +148,7 @@ struct PlayerCommands: Commands {
                 .keyboardShortcut("s", modifiers: [.command, .shift]).disabled(player.current == nil)
             if player.current != nil && !subtitles.isEmpty {
                 Divider()
-                Picker("Track", selection: Binding(get: { player.subtitleID }, set: {
-                    player.subtitleID = $0
-                    player.send(.track($0, true))
-                })) {
+                Picker("Track", selection: Binding(get: { player.subtitleID }, set: { player.selectTrack($0, subtitles: true) })) {
                     Text("Off").tag(Int32(-1))
                     ForEach(subtitles) { Text($0.name).tag($0.id) }
                 }

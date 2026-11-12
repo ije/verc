@@ -75,13 +75,13 @@ struct ContentView: View {
             .modifier(PlaylistMotion(distance: playlistVisible ? 296 : 0))
             .opacity(controlsVisible ? 1 : 0)
             .allowsHitTesting(controlsVisible)
-            if player.current?.isImage == false && !player.isPictureInPicture && !player.isPlaying && !player.isLoading && player.state != 7 {
+            if player.current?.isImage == false && !player.isPictureInPicture && !player.isPlaying && !player.isLoading && player.state != .failed {
                 let label = showPlaylist ? "Hide Playlist" : player.playLabel
                 Button {
                     if showPlaylist { showPlaylist = false }
                     else { player.togglePlay() }
                 } label: {
-                    Image(systemName: player.state == 6 ? "arrow.counterclockwise" : "play.fill")
+                    Image(systemName: player.state == .ended ? "arrow.counterclockwise" : "play.fill")
                         .font(.system(size: 52, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.9))
                         .frame(width: 100, height: 100)
@@ -116,7 +116,7 @@ struct ContentView: View {
         }
         .onChange(of: player.isPlaying) { revealControls() }
         .onChange(of: player.state) {
-            guard player.state == 6, player.repeatMode == .off, player.adjacentIndex(by: 1) == nil,
+            guard player.state == .ended, player.repeatMode == .off, player.adjacentIndex(by: 1) == nil,
                   let url = player.current?.url, let page = favorites.pages.first(where: { $0.media.contains(url) }) else { return }
             favorites.select(page.id)
             player.stop()
@@ -407,7 +407,7 @@ struct ContentView: View {
                 .padding(40).offset(y: -65)
             }
             if player.isLoading { ProgressView().controlSize(.small).tint(.white) }
-            if player.state == 7 {
+            if player.state == .failed {
                 VStack(spacing: 12) {
                     Image(systemName: "exclamationmark.triangle").font(.largeTitle)
                     Text("Verc cannot play this media.").font(.headline)
@@ -510,10 +510,7 @@ struct ContentView: View {
             if !subtitles.isEmpty {
                 HStack(spacing: 8) {
                     Text("Track").frame(width: 64, alignment: .leading)
-                    Picker("Subtitle Track", selection: Binding(get: { player.subtitleID }, set: {
-                        player.subtitleID = $0
-                        player.send(.track($0, true))
-                    })) {
+                    Picker("Subtitle Track", selection: Binding(get: { player.subtitleID }, set: { player.selectTrack($0, subtitles: true) })) {
                         Text("Off").tag(Int32(-1))
                         ForEach(subtitles) { track in
                             if track.isExternal {
@@ -551,10 +548,7 @@ struct ContentView: View {
             if hasAudioChoice {
                 Divider()
                 Text("Audio").font(.system(size: 11)).foregroundStyle(.secondary)
-                Picker("Audio Track", selection: Binding(get: { player.audioID }, set: {
-                    player.audioID = $0
-                    player.send(.track($0, false))
-                })) {
+                Picker("Audio Track", selection: Binding(get: { player.audioID }, set: { player.selectTrack($0, subtitles: false) })) {
                     Text("Off").tag(Int32(-1))
                     ForEach(player.audioTracks.filter { $0.id != -1 }) { Text($0.name).tag($0.id) }
                 }

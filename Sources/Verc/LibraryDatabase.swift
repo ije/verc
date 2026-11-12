@@ -89,9 +89,7 @@ final class LibraryDatabase {
             FROM items ORDER BY position
             """) {
             guard let key = row[0], let id = UUID(uuidString: key), let title = row[1], let directory = row[2],
-                  !directory.isEmpty, directory != ".", directory != "..", !directory.contains("/"), !directory.contains(":") else {
-                throw CocoaError(.fileReadCorruptFile)
-            }
+                  Library.isFolderName(directory) else { throw CocoaError(.fileReadCorruptFile) }
             var page = FavoritePage(id: id, title: title, background: try row[3].map(absoluteURL), clearedInfoTitle: row[4], directory: directory)
             page.libraryURL = root
             if let value = row[5] {
@@ -132,8 +130,7 @@ final class LibraryDatabase {
     func write(_ pages: [FavoritePage]) throws {
         try run("DELETE FROM items")
         for (position, page) in pages.enumerated() {
-            guard let directory = page.directory, !directory.isEmpty, directory != ".", directory != "..",
-                  !directory.contains("/"), !directory.contains(":") else { throw CocoaError(.fileReadCorruptFile) }
+            guard let directory = page.directory, Library.isFolderName(directory) else { throw CocoaError(.fileReadCorruptFile) }
             let id = page.id.uuidString
             let info = page.info
             let episodes = (page.episodeTitles == nil ? 0 : 1) | (page.episodeImages == nil ? 0 : 2)

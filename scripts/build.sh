@@ -115,6 +115,19 @@ fi
 while IFS= read -r -d '' file; do
   "${sign[@]}" "$file" || fail "Cannot sign library: $file"
 done < <(find "$destination" -type f -name '*.dylib' -print0)
+# Without a cache, libVLC opens every plugin at each launch. The cache records plugin sizes and dates, so write it after the last change to the plugins.
+clang "$destination/lib/libvlc.dylib" -Wl,-rpath,"$destination/lib" -x c - -o "$root/.build/vlc-cache" <<'EOF' || fail "Cannot build the VLC plugin cache tool."
+#include <stdlib.h>
+void *libvlc_new(int, const char *const *);
+int main(int count, char **arguments) {
+    const char *options[] = { "--ignore-config", "--quiet", "--reset-plugins-cache" };
+    return count == 2 && !setenv("VLC_PLUGIN_PATH", arguments[1], 1) && libvlc_new(3, options) ? 0 : 1;
+}
+EOF
+# Code signing accepts only code and symbolic links in Frameworks, so keep the cache in Resources.
+"$root/.build/vlc-cache" "$destination/plugins" && [[ -s "$destination/plugins/plugins.dat" ]] \
+  && mv "$destination/plugins/plugins.dat" "$app/Contents/Resources/VLC-plugins.dat" \
+  && ln -s ../../../Resources/VLC-plugins.dat "$destination/plugins/plugins.dat" || fail "Cannot write the VLC plugin cache."
 "${sign[@]}" "$app" || fail "Cannot sign the app."
 codesign --verify --deep --strict "$app" || fail "App signature verification failed."
 bytes=$(find "$app" -type f -exec stat -f '%z' {} + | awk '{ total += $1 } END { printf "%.0f", total }')

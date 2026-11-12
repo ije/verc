@@ -17,6 +17,11 @@ enum Library {
         return name.isEmpty ? "Untitled" : String(name.prefix(120))
     }
 
+    // A folder name from the database becomes a path in the library, so it must be one plain path component.
+    static func isFolderName(_ name: String) -> Bool {
+        !name.isEmpty && name != "." && name != ".." && !name.contains("/") && !name.contains(":")
+    }
+
     static func artworkName(_ url: URL) -> String {
         let digits = Array("0123456789abcdef".utf8)
         let hash = String(decoding: SHA256.hash(data: Data(url.absoluteString.utf8)).flatMap { [digits[Int($0 >> 4)], digits[Int($0 & 15)]] }, as: UTF8.self)
@@ -161,6 +166,11 @@ actor LibraryStore {
         return pages
     }
 
+    // The library holds a copy of these files, so another import of them would add each one again.
+    func copiedSources() -> Set<URL> {
+        Set(((try? database().run("SELECT source FROM origins WHERE copied = 1")) ?? []).compactMap { $0[0].flatMap(URL.init(string:))?.standardizedFileURL })
+    }
+
     func save(_ input: [FavoritePage], importing: Set<UUID> = [], moving: Set<URL> = []) throws -> [FavoritePage] {
         let files = FileManager.default
         let database = try database()
@@ -173,8 +183,7 @@ actor LibraryStore {
         for index in pages.indices {
             pages[index].libraryURL = root
             if let directory = pages[index].directory {
-                guard !directory.isEmpty, directory != ".", directory != "..", !directory.contains("/"),
-                      !directory.contains(":") else { throw CocoaError(.fileReadCorruptFile) }
+                guard Library.isFolderName(directory) else { throw CocoaError(.fileReadCorruptFile) }
                 guard importing.contains(pages[index].id) else { continue }
             } else {
                 let name = Library.filename(pages[index].title)
@@ -299,16 +308,20 @@ actor LibraryStore {
 
     private func restore(_ source: URL, from destination: URL, copied: Bool, interrupted: Bool) throws {
         let files = FileManager.default
-        guard files.fileExists(atPath: destination.path) else { return }
-        if !copied, (try? files.destinationOfSymbolicLink(atPath: source.path)) == destination.path { try files.removeItem(at: source) }
-        if copied && interrupted {
-            try files.removeItem(at: destination)
-        } else if !files.fileExists(atPath: source.path) {
-            try files.moveItem(at: destination, to: source)
-        } else if copied || interrupted {
-            // A move does not change its source until it completes, so this destination is a partial or extra copy.
-            try files.removeItem(at: destination)
-        } else { throw CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: source.path]) }
+        if files.fileExists(atPath: destination.path) {
+            if !copied, (try? files.destinationOfSymbolicLink(atPath: source.path)) == destination.path { try files.removeItem(at: source) }
+            if copied && interrupted {
+                try files.removeItem(at: destination)
+            } else if !files.fileExists(atPath: source.path) {
+                // The original folder can be gone. A folder on a volume that is not mounted cannot be made, so that move runs again later.
+                try files.createDirectory(at: source.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try files.moveItem(at: destination, to: source)
+            } else if copied || interrupted {
+                // A move does not change its source until it completes, so this destination is a partial or extra copy.
+                try files.removeItem(at: destination)
+            } else { throw CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: source.path]) }
+        }
+        // A failed import leaves the folders that it made for files that did not arrive.
         var folder = destination.deletingLastPathComponent()
         while folder.deletingLastPathComponent().path.hasPrefix(root.path + "/"),
               (try? files.contentsOfDirectory(atPath: folder.path))?.isEmpty == true {
