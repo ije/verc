@@ -1,10 +1,6 @@
 import AppKit
 import SwiftUI
 
-enum Theme {
-    static let muted = Color.primary.opacity(0.48)
-}
-
 struct ContentView: View {
     @Bindable var player: PlayerModel
     @Bindable var favorites: FavoritePages
@@ -33,21 +29,21 @@ struct ContentView: View {
 
     private var canvas: some View {
         playerCanvas
-        .overlay(alignment: .trailing) {
-            playlistSidebar
-                .padding(8)
-                .modifier(PlaylistMotion(distance: playlistVisible ? 0 : 296, slides: true))
-                .disabled(!playlistVisible)
-                .allowsHitTesting(playlistVisible)
-                .accessibilityHidden(!playlistVisible)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .clipped()
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: playlistVisible)
-        .background(WindowChrome(title: headerTitle.isEmpty ? "Verc" : headerTitle, controlsVisible: controlsVisible).frame(width: 0, height: 0))
-        .ignoresSafeArea()
-        .preferredColorScheme(.dark)
-        .tint(.primary)
+            .overlay(alignment: .trailing) {
+                playlistSidebar
+                    .padding(8)
+                    .modifier(PlaylistMotion(distance: playlistVisible ? 0 : 296, slides: true))
+                    .disabled(!playlistVisible)
+                    .allowsHitTesting(playlistVisible)
+                    .accessibilityHidden(!playlistVisible)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: playlistVisible)
+            .background(WindowChrome(title: headerTitle.isEmpty ? "Verc" : headerTitle, controlsVisible: controlsVisible).frame(width: 0, height: 0))
+            .ignoresSafeArea()
+            .preferredColorScheme(.dark)
+            .tint(.primary)
     }
 
     private var playerCanvas: some View {
@@ -106,124 +102,124 @@ struct ContentView: View {
 
     private var interactiveCanvas: some View {
         canvas
-        .onContinuousHover { phase in
-            if case .active = phase { canvasHovered = true }
-            else { canvasHovered = false; chromeHovered = false }
-            revealControls()
-        }
-        .onChange(of: player.isFullScreen && !controlsVisible && canvasHovered && scenePhase == .active && trackedMenus.isEmpty) { _, hidden in
-            NSCursor.setHiddenUntilMouseMoves(hidden)
-        }
-        .onChange(of: player.isPlaying) { revealControls() }
-        .onChange(of: player.state) {
-            guard player.state == .ended, player.repeatMode == .off, player.adjacentIndex(by: 1) == nil,
-                  let url = player.current?.url, let page = favorites.pages.first(where: { $0.media.contains(url) }) else { return }
-            favorites.select(page.id)
-            player.stop()
-        }
-        .onChange(of: player.current?.id) {
-            popup = nil
-            revealControls()
-            if let url = player.current?.url, let index = favorites.pages.firstIndex(where: { $0.media.contains(url) }), index > 0 {
-                favorites.pages.move(fromOffsets: IndexSet(integer: index), toOffset: 0)
+            .onContinuousHover { phase in
+                if case .active = phase { canvasHovered = true }
+                else { canvasHovered = false; chromeHovered = false }
+                revealControls()
             }
-        }
-        .onChange(of: popup) { revealControls() }
-        .onChange(of: scenePhase) { if scenePhase != .active && popup != .credits { popup = nil } }
-        .onChange(of: player.showURL) { revealControls() }
-        .onChange(of: player.showInfo) { revealControls() }
-        .onChange(of: player.showIconPicker) { popup = nil; revealControls() }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in player.isFullScreen = true }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in player.isFullScreen = false }
-        .onReceive(NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)) { notification in
-            if let menu = notification.object as? NSMenu { trackedMenus.insert(ObjectIdentifier(menu)) }
-            hideTask?.cancel()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSMenu.didEndTrackingNotification)) { notification in
-            if let menu = notification.object as? NSMenu { trackedMenus.remove(ObjectIdentifier(menu)) }
-            if trackedMenus.isEmpty { revealControls() }
-        }
-        .onDisappear {
-            hideTask?.cancel()
-            NSCursor.setHiddenUntilMouseMoves(false)
-        }
+            .onChange(of: player.isFullScreen && !controlsVisible && canvasHovered && scenePhase == .active && trackedMenus.isEmpty) { _, hidden in
+                NSCursor.setHiddenUntilMouseMoves(hidden)
+            }
+            .onChange(of: player.isPlaying) { revealControls() }
+            .onChange(of: player.state) {
+                guard player.state == .ended, player.repeatMode == .off, player.adjacentIndex(by: 1) == nil,
+                      let url = player.current?.url, let page = favorites.pages.first(where: { $0.media.contains(url) }) else { return }
+                favorites.select(page.id)
+                player.stop()
+            }
+            .onChange(of: player.current?.id) {
+                popup = nil
+                revealControls()
+                if let url = player.current?.url, let index = favorites.pages.firstIndex(where: { $0.media.contains(url) }), index > 0 {
+                    favorites.pages.move(fromOffsets: IndexSet(integer: index), toOffset: 0)
+                }
+            }
+            .onChange(of: popup) { revealControls() }
+            .onChange(of: scenePhase) { if scenePhase != .active && popup != .credits { popup = nil } }
+            .onChange(of: player.showURL) { revealControls() }
+            .onChange(of: player.showInfo) { revealControls() }
+            .onChange(of: player.showIconPicker) { popup = nil; revealControls() }
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in player.isFullScreen = true }
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in player.isFullScreen = false }
+            .onReceive(NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)) { notification in
+                if let menu = notification.object as? NSMenu { trackedMenus.insert(ObjectIdentifier(menu)) }
+                hideTask?.cancel()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSMenu.didEndTrackingNotification)) { notification in
+                if let menu = notification.object as? NSMenu { trackedMenus.remove(ObjectIdentifier(menu)) }
+                if trackedMenus.isEmpty { revealControls() }
+            }
+            .onDisappear {
+                hideTask?.cancel()
+                NSCursor.setHiddenUntilMouseMoves(false)
+            }
     }
 
     private var dropCanvas: some View {
         interactiveCanvas
-        .overlay {
-            if dropTargeted {
-                Group {
-                    if player.current == nil {
-                        RoundedRectangle(cornerRadius: 12)
-                            .strokeBorder(Theme.muted, style: StrokeStyle(lineWidth: 2, dash: [8, 5]))
-                            .padding(8)
-                            .ignoresSafeArea()
-                    } else {
-                        HStack(spacing: 12) { DropIcon(); Text("Drop media") }
-                            .font(.title2.weight(.medium)).foregroundStyle(.white).padding(24)
-                            .glassEffect(.regular.tint(.black.opacity(0.35)), in: RoundedRectangle(cornerRadius: 12))
+            .overlay {
+                if dropTargeted {
+                    Group {
+                        if player.current == nil {
+                            RoundedRectangle(cornerRadius: 12)
+                                .strokeBorder(.primary.opacity(0.48), style: StrokeStyle(lineWidth: 2, dash: [8, 5]))
+                                .padding(8)
+                                .ignoresSafeArea()
+                        } else {
+                            HStack(spacing: 12) { DropIcon(); Text("Drop media") }
+                                .font(.title2.weight(.medium)).foregroundStyle(.white).padding(24)
+                                .glassEffect(.regular.tint(.black.opacity(0.35)), in: RoundedRectangle(cornerRadius: 12))
+                        }
                     }
+                    .allowsHitTesting(false)
                 }
-                .allowsHitTesting(false)
             }
-        }
-        .dropDestination(for: URL.self) { urls, _ in
-            guard !urls.isEmpty else { return false }
-            if favorites.open(urls, player: player) { return true }
-            Task {
-                let offerPlaylist = await Task.detached(priority: .userInitiated) { () -> Bool in
-                    let files = urls.filter { $0.isFileURL && !MediaItem.subtitleExtensions.contains($0.pathExtension.lowercased()) }
-                    return files.count > 1 || files.contains { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
-                }.value
-                if offerPlaylist { droppedURLs = urls }
-                else { player.add(urls) }
-            }
-            return true
-        } isTargeted: { dropTargeted = $0 }
+            .dropDestination(for: URL.self) { urls, _ in
+                guard !urls.isEmpty else { return false }
+                if favorites.open(urls, player: player) { return true }
+                Task {
+                    let offerPlaylist = await Task.detached(priority: .userInitiated) { () -> Bool in
+                        let files = urls.filter { $0.isFileURL && !MediaItem.subtitleExtensions.contains($0.pathExtension.lowercased()) }
+                        return files.count > 1 || files.contains { (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true }
+                    }.value
+                    if offerPlaylist { droppedURLs = urls }
+                    else { player.add(urls) }
+                }
+                return true
+            } isTargeted: { dropTargeted = $0 }
     }
 
     var body: some View {
         dropCanvas
-        .disabled(modal)
-        .allowsHitTesting(!modal)
-        .accessibilityHidden(modal)
-        .overlay {
-            if modal {
-                ZStack {
-                    Color.black.opacity(0.18).ignoresSafeArea().accessibilityHidden(true)
-                        .onTapGesture { player.showIconPicker = false }
-                    if player.showIconPicker { IconPicker(isPresented: $player.showIconPicker) }
-                    else if let pages = favorites.draft {
-                        GeometryReader { geometry in
-                            let compact = geometry.size.height < 580
-                            FavoriteEditor(favorites: favorites, pages: pages, player: player, compact: compact)
-                                .id(pages.first?.id).padding(compact ? 12 : 20)
-                                .frame(width: geometry.size.width, height: geometry.size.height)
-                        }
-                        .ignoresSafeArea()
-                    } else if player.showURL { StreamDialog(player: player) }
-                    else { MediaInfo(player: player) }
+            .disabled(modal)
+            .allowsHitTesting(!modal)
+            .accessibilityHidden(modal)
+            .overlay {
+                if modal {
+                    ZStack {
+                        Color.black.opacity(0.18).ignoresSafeArea().accessibilityHidden(true)
+                            .onTapGesture { player.showIconPicker = false }
+                        if player.showIconPicker { IconPicker(isPresented: $player.showIconPicker) }
+                        else if let pages = favorites.draft {
+                            GeometryReader { geometry in
+                                let compact = geometry.size.height < 580
+                                FavoriteEditor(favorites: favorites, pages: pages, player: player, compact: compact)
+                                    .id(pages.first?.id).padding(compact ? 12 : 20)
+                                    .frame(width: geometry.size.width, height: geometry.size.height)
+                            }
+                            .ignoresSafeArea()
+                        } else if player.showURL { StreamDialog(player: player) }
+                        else { MediaInfo(player: player) }
+                    }
+                    .preferredColorScheme(.dark)
                 }
-                .preferredColorScheme(.dark)
             }
-        }
-        .alert("Unable to Complete Action", isPresented: Binding<Bool>(get: { player.error != nil || favorites.error != nil }, set: { if !$0 { player.error = nil; favorites.error = nil } })) {
-            Button("OK") { player.error = nil; favorites.error = nil }
-        } message: { Text(player.error ?? favorites.error ?? "") }
-        .alert("Add to Library?", isPresented: Binding<Bool>(get: { droppedURLs != nil }, set: { if !$0 { droppedURLs = nil } }), presenting: droppedURLs) { urls in
-            Button("Add to Library…") { favorites.prepareDraft(urls, player: player) }
-            Button("Open Now") { player.add(urls) }
-            Button("Cancel", role: .cancel) {}
-        } message: { _ in Text("Add these media files to your library, or open them now.") }
-        .alert("Remove from Library?", isPresented: Binding<Bool>(get: { favorites.pendingDeletion != nil }, set: { if !$0 { favorites.pendingDeletion = nil } }), presenting: favorites.pendingDeletion) { page in
-            Button("Remove", role: .destructive) {
-                favorites.remove(page)
-                favorites.pendingDeletion = nil
-                favorites.draft = nil
-            }
-            Button("Cancel", role: .cancel) { favorites.pendingDeletion = nil }
-        } message: { page in Text("Remove “\(page.displayTitle)” from your library. Your media files will stay on disk.") }
+            .alert("Unable to Complete Action", isPresented: Binding<Bool>(get: { player.error != nil || favorites.error != nil }, set: { if !$0 { player.error = nil; favorites.error = nil } })) {
+                Button("OK") { player.error = nil; favorites.error = nil }
+            } message: { Text(player.error ?? favorites.error ?? "") }
+            .alert("Add to Library?", isPresented: Binding<Bool>(get: { droppedURLs != nil }, set: { if !$0 { droppedURLs = nil } }), presenting: droppedURLs) { urls in
+                Button("Add to Library…") { favorites.prepareDraft(urls, player: player) }
+                Button("Open Now") { player.add(urls) }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in Text("Add these media files to your library, or open them now.") }
+            .alert("Remove from Library?", isPresented: Binding<Bool>(get: { favorites.pendingDeletion != nil }, set: { if !$0 { favorites.pendingDeletion = nil } }), presenting: favorites.pendingDeletion) { page in
+                Button("Remove", role: .destructive) {
+                    favorites.remove(page)
+                    favorites.pendingDeletion = nil
+                    favorites.draft = nil
+                }
+                Button("Cancel", role: .cancel) { favorites.pendingDeletion = nil }
+            } message: { page in Text("Remove “\(page.displayTitle)” from your library. Your media files will stay on disk.") }
     }
 
     private func revealControls() {
@@ -259,8 +255,8 @@ struct ContentView: View {
                 .padding(.trailing, 12)
             } else if player.current == nil, !favorites.showAllMedia, let page = favorites.selectedPage {
                 GlassIconButton(symbol: "info", label: page.editTitle, help: "\(page.editTitle)… · ⌘I", size: 18) { favorites.draft = [page] }
-                .keyboardShortcut("i")
-                .padding(.trailing, 7)
+                    .keyboardShortcut("i")
+                    .padding(.trailing, 7)
             } else if player.current == nil && !favorites.showAllMedia && favorites.selection == nil {
                 GlassIconButton(symbol: "info", label: "Credits", help: "Credits · ⌘I", size: 18) {
                     popup = popup == .credits ? nil : .credits
@@ -826,11 +822,13 @@ struct VideoSurface: NSViewRepresentable {
     let player: PlayerModel
     var attached = true
     var controlsVisible = false
+
     func makeNSView(context: Context) -> SubtitleSurface {
         let host = SubtitleSurface()
         host.wantsLayer = true
         return host
     }
+
     func updateNSView(_ host: SubtitleSurface, context: Context) {
         guard attached else { host.player = nil; host.subviews.forEach { $0.removeFromSuperview() }; return }
         host.player = player
@@ -850,7 +848,9 @@ struct VideoSurface: NSViewRepresentable {
 struct WindowChrome: NSViewRepresentable {
     let title: String
     let controlsVisible: Bool
+
     func makeNSView(context: Context) -> CanvasWindowView { CanvasWindowView() }
+
     func updateNSView(_ view: CanvasWindowView, context: Context) {
         view.title = title
         view.controlsVisible = controlsVisible
@@ -861,6 +861,7 @@ struct WindowChrome: NSViewRepresentable {
 final class CanvasWindowView: NSView {
     var title = ""
     var controlsVisible = true
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         guard let window else { return }
@@ -872,6 +873,7 @@ final class CanvasWindowView: NSView {
         window.backgroundColor = .black
         configure()
     }
+
     func configure() {
         guard let window else { return }
         if window.title != title { window.title = title }
@@ -885,6 +887,7 @@ struct StreamDialog: View {
     @Bindable var player: PlayerModel
     @State private var address = ""
     @FocusState private var focused: Bool
+
     private var url: URL? {
         // UDP, RTP, and SRT addresses such as udp://@:1234 listen on a local port and have no host.
         guard let url = URL(string: address.trimmingCharacters(in: .whitespacesAndNewlines)),
@@ -915,6 +918,7 @@ struct StreamDialog: View {
 struct MediaInfo: View {
     @Bindable var player: PlayerModel
     @FocusState private var focused: Bool
+
     var body: some View {
         let ratio = player.videoRatio
         return VStack(alignment: .leading, spacing: 20) {

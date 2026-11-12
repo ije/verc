@@ -102,12 +102,6 @@ done < <(find "$destination" -type f -name '*.dylib' -print0)
 if [[ $config == release ]]; then
   strip -S -x "$app/Contents/MacOS/Verc" || fail "Cannot strip the release executable."
 fi
-cp scripts/vlc-plugins.json "$app/Contents/Resources/VLC-plugins.json"
-cat > "$app/Contents/Resources/VLC-runtime.txt" <<EOF
-Selected playback runtime from $runtime
-$plugin_count VLC plugins plus Verc's subtitle layout and snapshot conversion plugins. No VLC desktop UI, extensions, translations, capture, casting, or dedicated encoder modules.
-Include corresponding VLC and dependency sources when you distribute this bundle. See NOTICE.
-EOF
 sign=(codesign --force --sign "${SIGNING_IDENTITY:--}")
 if [[ ${SIGNING_IDENTITY:--} != - ]]; then
   sign+=(--timestamp --options runtime)

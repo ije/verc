@@ -198,6 +198,7 @@ static VCVideoTrack video_track(VCEngine *e, void *media) {
     if (count) e->media_tracks_release(tracks, count);
     return found;
 }
+
 static void start_at(VCEngine *e, void *media, double seconds) {
     char option[64];
     snprintf(option, sizeof(option), ":start-time=%.3f", seconds);
@@ -206,6 +207,7 @@ static void start_at(VCEngine *e, void *media, double seconds) {
 
 const char *vc_version(VCEngine *e) { return e->get_version(); }
 void vc_drawable(VCEngine *e, void *view) { e->media_player_set_nsobject(e->player, view); }
+
 int vc_open(VCEngine *e, const char *uri, double start, const char *const *subtitles, int count) {
     e->media_player_stop(e->player);
     atomic_store(&e->failed, false);
@@ -219,12 +221,14 @@ int vc_open(VCEngine *e, const char *uri, double start, const char *const *subti
     e->media = media;
     return e->media_player_play(e->player);
 }
+
 void vc_stop(VCEngine *e) { e->media_player_stop(e->player); }
 void vc_pause(VCEngine *e, int paused) { e->media_player_set_pause(e->player, paused); }
 int vc_state(VCEngine *e) { return e->media_player_get_state(e->player); }
 int vc_failed(VCEngine *e) { return atomic_load(&e->failed) || !atomic_load(&e->playable); }
 int64_t vc_time(VCEngine *e) { return e->media_player_get_time(e->player); }
 int64_t vc_duration(VCEngine *e) { return e->media_player_get_length(e->player); }
+
 static bool parse(VCEngine *e, void *media, int flags) {
     bool parsed = false;
     void *events = e->media_event_manager(media);
@@ -239,16 +243,14 @@ static bool parse(VCEngine *e, void *media, int flags) {
     dispatch_release(signal);
     return parsed;
 }
+
 VCMediaInfo vc_read_media_info(VCEngine *e, const char *uri) {
     VCMediaInfo info = { .duration = -1, .subtitleCount = -1 };
     void *media = e->media_new_location(e->instance, uri);
     if (!media) return info;
     if (parse(e, media, 0)) {
         info.duration = e->media_get_duration(media);
-        VCVideoTrack video = video_track(e, media);
-        bool swap = video.orientation & 4;
-        info.width = swap ? video.height : video.width;
-        info.height = swap ? video.width : video.height;
+        info.hasVideo = video_track(e, media).width != 0;
         VCMediaTrack **tracks = NULL;
         unsigned count = e->media_tracks_get(media, &tracks);
         info.subtitleCount = 0;
@@ -355,15 +357,18 @@ char **vc_read_playlist(VCEngine *e, const char *uri) {
     e->media_release(media);
     return entries;
 }
+
 void vc_free_playlist(char **entries) {
     for (char **entry = entries; *entry; entry++) free(*entry);
     free(entries);
 }
+
 int vc_seekable(VCEngine *e) { return e->media_player_is_seekable(e->player); }
 void vc_seek(VCEngine *e, int64_t time) { e->media_player_set_time(e->player, time); }
 void vc_volume(VCEngine *e, int volume) { e->audio_set_volume(e->player, volume); }
 int vc_rate(VCEngine *e, float rate) { return e->media_player_set_rate(e->player, rate); }
 int vc_snapshot(VCEngine *e, const char *path) { return e->video_take_snapshot(e->player, 0, path, 0, 0); }
+
 int vc_video_size(VCEngine *e, unsigned *width, unsigned *height, unsigned *ratioWidth, unsigned *ratioHeight) {
     if (!e->media) return -1;
     VCVideoTrack video = video_track(e, e->media);
@@ -381,23 +386,31 @@ int vc_video_size(VCEngine *e, unsigned *width, unsigned *height, unsigned *rati
     *ratioHeight = (unsigned)((swap ? x : y) / divisor);
     return 0;
 }
+
 VCTrack *vc_tracks(VCEngine *e, int subtitles) {
     return subtitles ? e->video_get_spu_description(e->player) : e->audio_get_track_description(e->player);
 }
+
 void vc_free_tracks(VCEngine *e, VCTrack *tracks) { e->track_description_list_release(tracks); }
+
 unsigned vc_media_slaves(VCEngine *e, VCMediaSlave ***slaves) {
     *slaves = NULL;
     return e->media ? e->media_slaves_get(e->media, slaves) : 0;
 }
+
 void vc_free_media_slaves(VCEngine *e, VCMediaSlave **slaves, unsigned count) { e->media_slaves_release(slaves, count); }
+
 int vc_selected_track(VCEngine *e, int subtitles) {
     return subtitles ? e->video_get_spu(e->player) : e->audio_get_track(e->player);
 }
+
 int vc_select_track(VCEngine *e, int subtitles, int id) {
     return subtitles ? e->video_set_spu(e->player, id) : e->audio_set_track(e->player, id);
 }
+
 int vc_add_subtitle(VCEngine *e, const char *uri) { return e->media_player_add_slave(e->player, 0, uri, 1); }
 void vc_crop(VCEngine *e, const char *geometry) { e->video_set_crop_geometry(e->player, geometry); }
+
 void vc_subtitle_layout(VCEngine *e, VCSubtitleLayout layout, const char *font) {
     if (e->subtitleState) e->subtitleLayout(e->subtitleState, layout, font);
 }

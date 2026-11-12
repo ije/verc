@@ -1,3 +1,5 @@
+import { triangle, view } from "./scene.js";
+
 const player = document.querySelector(".player"), gallery = player.querySelector(".gallery"), library = player.querySelector(".library");
 const dots = [...player.querySelectorAll(".page-dot")], toggle = player.querySelector(".library-toggle"), search = library.querySelector("input");
 const tooltip = player.querySelector(".poster-tooltip"), title = player.querySelector(".window-title");
@@ -192,5 +194,3 @@ try {
     console.warn("Verc library:", error.message);
     for (const button of [...dots.slice(1), toggle]) button.disabled = true;
 }
-import { triangle, view } from "./scene.js";
-

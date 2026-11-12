@@ -37,7 +37,7 @@ enum Library {
 }
 
 actor LibraryStore {
-    private struct Move: Codable {
+    private struct Move {
         let source: URL
         let destination: URL
         let media: URL
@@ -56,13 +56,11 @@ actor LibraryStore {
         try files.createDirectory(at: root, withIntermediateDirectories: true)
         try? files.setAttributes([.extensionHidden: true], ofItemAtPath: root.path)
         let database = try LibraryDatabase(root: root)
-        let legacy = root.appendingPathComponent("Library.plist")
-        let journal = root.appendingPathComponent(".Import.plist")
         try database.run("BEGIN IMMEDIATE")
         do {
             let version = try database.run("PRAGMA user_version").first?.first ?? nil
-            guard let version, let number = Int(version), (0...5).contains(number) else {
-                throw CocoaError(.fileReadUnknown, userInfo: [NSLocalizedDescriptionKey: "This library requires a newer version of Verc."])
+            guard version == "0" || version == "5" else {
+                throw CocoaError(.fileReadUnknown, userInfo: [NSLocalizedDescriptionKey: "This library is from another version of Verc."])
             }
             if version == "0" {
                 try database.run("""
@@ -87,51 +85,15 @@ actor LibraryStore {
                     CREATE TABLE artwork (item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
                                           url TEXT NOT NULL, filename TEXT NOT NULL, PRIMARY KEY (item_id, url))
                     """)
-                try database.run("CREATE TABLE imports (position INTEGER PRIMARY KEY, source TEXT NOT NULL, destination TEXT NOT NULL)")
-                var pages: [FavoritePage] = []
-                if files.fileExists(atPath: legacy.path) {
-                    pages = try PropertyListDecoder().decode([FavoritePage].self, from: Data(contentsOf: legacy))
-                    for index in pages.indices {
-                        pages[index].media = try pages[index].media.map { try database.absoluteURL($0.relativeString) }
-                        pages[index].background = try pages[index].background.map { try database.absoluteURL($0.relativeString) }
-                    }
-                }
-                try database.write(pages)
-            } else if version == "1" {
-                try database.run("ALTER TABLE pages RENAME TO items")
-                for table in ["media", "backdrops", "episodes", "artwork"] {
-                    try database.run("ALTER TABLE \(table) RENAME COLUMN page_id TO item_id")
-                }
-            }
-            if number < 3 {
+                try database.run("CREATE TABLE imports (position INTEGER PRIMARY KEY, source TEXT NOT NULL, destination TEXT NOT NULL, copied INTEGER NOT NULL DEFAULT 0)")
                 // Imported files keep their original paths, so removing an item can move them back.
-                try database.run("CREATE TABLE origins (destination TEXT PRIMARY KEY, source TEXT NOT NULL, media TEXT NOT NULL)")
-            }
-            if number > 0 && number < 4 { try database.run("ALTER TABLE items ADD COLUMN credits TEXT") }
-            if number < 5 {
-                for table in ["imports", "origins"] {
-                    try database.run("ALTER TABLE \(table) ADD COLUMN copied INTEGER NOT NULL DEFAULT 0")
-                }
+                try database.run("CREATE TABLE origins (destination TEXT PRIMARY KEY, source TEXT NOT NULL, media TEXT NOT NULL, copied INTEGER NOT NULL DEFAULT 0)")
                 try database.run("PRAGMA user_version = 5")
-            }
-            if files.fileExists(atPath: journal.path) {
-                let committed = Set(try database.read().flatMap(\.media))
-                for move in try PropertyListDecoder().decode([Move].self, from: Data(contentsOf: journal)) where !committed.contains(move.media) {
-                    try database.run("INSERT INTO imports (source, destination) VALUES (?, ?)", [move.source.absoluteString, database.relativeURL(move.destination)])
-                }
             }
             try database.run("COMMIT")
         } catch {
             _ = try? database.run("ROLLBACK")
             throw error
-        }
-        if files.fileExists(atPath: journal.path) { try files.removeItem(at: journal) }
-        if files.fileExists(atPath: legacy.path) {
-            for page in try database.read() {
-                let metadata = root.appendingPathComponent(page.directory!, isDirectory: true).appendingPathComponent("tmdb.plist")
-                if files.fileExists(atPath: metadata.path) { try files.removeItem(at: metadata) }
-            }
-            try files.removeItem(at: legacy)
         }
         connection = database
         return database
@@ -144,8 +106,7 @@ actor LibraryStore {
             try files.createDirectory(at: root, withIntermediateDirectories: false)
         } else {
             guard try root.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true,
-                  files.fileExists(atPath: root.appendingPathComponent("Library.vercdb").path)
-                    || files.fileExists(atPath: root.appendingPathComponent("Library.plist").path) else {
+                  files.fileExists(atPath: root.appendingPathComponent("Library.vercdb").path) else {
                 throw CocoaError(.fileReadCorruptFile)
             }
         }
@@ -153,16 +114,6 @@ actor LibraryStore {
         recover(database)
         var pages = try database.read()
         for index in pages.indices { pages[index].cachedArtwork = localArtwork(pages[index]) }
-        // Earlier versions saved favorites in UserDefaults. Their files stay where they are.
-        if root == Library.url, let data = UserDefaults.standard.data(forKey: "favoritePages") {
-            var seen = Set(pages.flatMap(\.media).map(\.standardizedFileURL))
-            for var page in (try? JSONDecoder().decode([FavoritePage].self, from: data)) ?? [] where !pages.contains(where: { $0.id == page.id }) {
-                page.media = page.media.map(Library.resolve).filter { seen.insert($0.standardizedFileURL).inserted }
-                if !page.media.isEmpty { pages.append(page) }
-            }
-            pages = try save(pages)
-            UserDefaults.standard.removeObject(forKey: "favoritePages")
-        }
         return pages
     }
 

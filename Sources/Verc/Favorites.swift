@@ -1,7 +1,7 @@
 import AppKit
 import Observation
 
-struct FavoritePage: Identifiable, Codable, Sendable {
+struct FavoritePage: Identifiable, Sendable {
     var id = UUID()
     var title = ""
     var media: [URL] = []
@@ -25,8 +25,9 @@ struct FavoritePage: Identifiable, Codable, Sendable {
     }
 
     var editTitle: String { info?.mediaType == .tv ? "Edit TV Show" : info?.mediaType == .movie ? "Edit Movie" : "Edit Media" }
-
     var lookupKey: [String] { [title] + media.map(\.absoluteString) }
+    var displayTitle: String { title + seasonSuffix }
+
     var missingSeasons: [Int] {
         guard info?.mediaType == .tv else { return [] }
         return Set(media.compactMap { url -> Int? in
@@ -37,12 +38,12 @@ struct FavoritePage: Identifiable, Codable, Sendable {
             return filename.season
         }).sorted()
     }
+
     var seasonSuffix: String {
         guard info?.mediaType == .tv else { return "" }
         let seasons = Set(media.compactMap { MediaFilename($0.deletingPathExtension().lastPathComponent).season }).sorted()
         return seasons.count > 1 ? " · Seasons \(seasons.map(String.init).joined(separator: ", "))" : ""
     }
-    var displayTitle: String { title + seasonSuffix }
 
     func title(for url: URL) -> String {
         let item = MediaItem(url: url)

@@ -1,11 +1,10 @@
 import AppKit
-import VLC
-import Foundation
 import ImageIO
 import MediaPlayer
 import Observation
 import Synchronization
 import UniformTypeIdentifiers
+import VLC
 
 struct MediaItem: Identifiable {
     let id = UUID()
@@ -152,14 +151,12 @@ private enum MediaCommand: Sendable {
 
 final class MediaDetails: Sendable {
     let duration: Double?
-    let width: UInt32
-    let height: UInt32
+    let hasVideo: Bool
     let subtitleCount: Int?
 
-    init(duration: Double? = nil, width: UInt32 = 0, height: UInt32 = 0, subtitleCount: Int? = nil) {
+    init(duration: Double? = nil, hasVideo: Bool = false, subtitleCount: Int? = nil) {
         self.duration = duration
-        self.width = width
-        self.height = height
+        self.hasVideo = hasVideo
         self.subtitleCount = subtitleCount
     }
 }
@@ -419,9 +416,9 @@ final class VLC: @unchecked Sendable {
             // Requests wait in a serial queue, so an earlier one can have read this file.
             if let cached = mediaDetails.object(forKey: url as NSURL) { return cached }
             let info = vc_read_media_info(handle, url.absoluteString)
-            let details = MediaDetails(duration: info.duration > 0 ? Double(info.duration) / 1000 : nil, width: info.width, height: info.height,
+            let details = MediaDetails(duration: info.duration > 0 ? Double(info.duration) / 1000 : nil, hasVideo: info.hasVideo != 0,
                                        subtitleCount: info.subtitleCount >= 0 ? Int(info.subtitleCount) : nil)
-            if details.duration != nil || details.width > 0 { mediaDetails.setObject(details, forKey: url as NSURL) }
+            if details.duration != nil || details.hasVideo { mediaDetails.setObject(details, forKey: url as NSURL) }
             return details
         }
     }
@@ -571,6 +568,7 @@ final class VLC: @unchecked Sendable {
     var engineError: String?
     var engineVersion: String?
     var isPictureInPicture = false
+    var openLibrary: (([URL]) -> Bool)?
     private var isSavingFrame = false
     @ObservationIgnored let videoView = NSView()
     @ObservationIgnored private(set) var engine: VLC?
@@ -594,6 +592,7 @@ final class VLC: @unchecked Sendable {
     var isLoading: Bool { current != nil && [.idle, .opening, .buffering].contains(state) }
     var playLabel: String { isPlaying ? "Pause" : state == .ended ? "Play Again" : "Play" }
     var pictureInPictureLabel: String { isPictureInPicture ? "Exit Picture in Picture" : "Enter Picture in Picture" }
+
     init() {
         if let data = UserDefaults.standard.data(forKey: "playbackProgress"),
            let saved = try? JSONDecoder().decode([URL: PlaybackProgress].self, from: data) {
@@ -837,8 +836,6 @@ final class VLC: @unchecked Sendable {
         controller.mainWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
-
-    var openLibrary: (([URL]) -> Bool)?
 
     func openFiles(subtitles: Bool = false) {
         let panel = NSOpenPanel()

@@ -15,8 +15,7 @@ typedef struct VCMediaSlave {
 } VCMediaSlave;
 typedef struct VCMediaInfo {
     int64_t duration;
-    unsigned width, height;
-    int subtitleCount;
+    int hasVideo, subtitleCount;
 } VCMediaInfo;
 typedef struct VCPreview {
     int64_t duration;

@@ -45,12 +45,13 @@ struct MediaFilename: Sendable {
     }
 }
 
-struct TMDBTitle: Codable, Sendable {
-    enum MediaType: String, Codable, Sendable { case movie, tv }
+struct TMDBTitle: Decodable, Sendable {
+    enum MediaType: String, Decodable, Sendable { case movie, tv }
     struct Credit: Codable, Equatable, Sendable {
         let role: String
         let names: [String]
     }
+
     let id: Int
     let mediaType: MediaType
     let title: String

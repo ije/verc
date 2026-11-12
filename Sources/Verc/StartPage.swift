@@ -1,9 +1,8 @@
 import AppKit
 import ImageIO
-import Observation
+import simd
 import SwiftUI
 import UniformTypeIdentifiers
-import simd
 
 @MainActor private let tmdbLogo = Bundle.main.url(forResource: "TMDB", withExtension: "svg").flatMap { NSImage(contentsOf: $0) }
 
@@ -719,7 +718,7 @@ struct FavoriteEditor: View {
                             lookupAttempt += 1
                             focused = page.id
                         } label: { Image(systemName: "xmark").frame(width: 20, height: 20) }
-                            .buttonBorderShape(.circle).controlSize(.mini).help("Clear TMDB Information").accessibilityLabel("Clear TMDB Information")
+                        .buttonBorderShape(.circle).controlSize(.mini).help("Clear TMDB Information").accessibilityLabel("Clear TMDB Information")
                     }
                 } else if !loading && page.media.contains(where: { MediaItem(url: $0).isVideo }) {
                     HStack {
@@ -830,7 +829,7 @@ struct FavoriteEditor: View {
                     ProgressView().controlSize(.small)
                     Text("Adding files to the library…")
                 }
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                .font(.system(size: 12)).foregroundStyle(.secondary)
             }
             if loading {
                 HStack(spacing: 8) { ProgressView().controlSize(.small); Text("TMDB lookup in progress…") }
@@ -914,84 +913,84 @@ struct FavoriteEditor: View {
         .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 20))
         .glassEffect(.regular.tint(.black.opacity(0.25)), in: RoundedRectangle(cornerRadius: 20))
         content
-        .disabled(favorites.saving)
-        .alert("Delete original files?", isPresented: Binding(get: { pendingFiles != nil }, set: { if !$0 { pendingFiles = nil } }), presenting: pendingFiles) { media in
-            Button("Keep Originals") { pages[0].media += media }.keyboardShortcut(.defaultAction)
-            Button("Delete Originals", role: .destructive) {
-                originalsToDelete.formUnion(media)
-                pages[0].media += media
+            .disabled(favorites.saving)
+            .alert("Delete original files?", isPresented: Binding(get: { pendingFiles != nil }, set: { if !$0 { pendingFiles = nil } }), presenting: pendingFiles) { media in
+                Button("Keep Originals") { pages[0].media += media }.keyboardShortcut(.defaultAction)
+                Button("Delete Originals", role: .destructive) {
+                    originalsToDelete.formUnion(media)
+                    pages[0].media += media
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text("The library will keep a copy. Delete the selected files from their original locations when you save?")
             }
-            Button("Cancel", role: .cancel) {}
-        } message: { _ in
-            Text("The library will keep a copy. Delete the selected files from their original locations when you save?")
-        }
-        .task { await Task.yield(); focused = pages.first(where: { $0.info == nil })?.id }
-        .task(id: pages.flatMap(\.media)) {
-            let media = pages.flatMap(\.media).filter { !MediaItem(url: $0).isImage }
-            let search = Task.detached(priority: .utility) { MediaItem.subtitleFiles(for: media) { Task.isCancelled } }
-            let found = await withTaskCancellationHandler { await search.value } onCancel: { search.cancel() }
-            if !Task.isCancelled { subtitled = Set(found.filter { !$0.value.isEmpty }.keys) }
-        }
-        .onExitCommand { if !favorites.saving { favorites.draft = nil } }
-        .accessibilityAddTraits(.isModal)
-        .task(id: [String(lookupAttempt)] + pages.flatMap { [$0.id.uuidString] + $0.lookupKey }) {
-            loading = true
-            defer { if !Task.isCancelled { loading = false } }
-            var waited = false
-            for (index, var updated) in pages.enumerated() {
-                let id = updated.id
-                let input = updated.lookupKey
-                guard input != resolvedInputs[id], updated.clearedInfoTitle == nil,
-                      updated.info == nil || !updated.missingSeasons.isEmpty,
-                      let first = updated.media.first(where: { MediaItem(url: $0).isVideo }) else { continue }
-                lookupStatus[id] = nil
-                do {
-                    if !waited { try await Task.sleep(for: .milliseconds(400)); waited = true }
-                    if updated.info == nil {
-                        let filename = MediaFilename(first.deletingPathExtension().lastPathComponent)
-                        let name = MediaFilename(updated.title)
-                        let query = name.title.isEmpty ? filename.title : name.title
-                        guard !query.isEmpty else { continue }
-                        let year = name.year ?? filename.year
-                        let sameTitle = { (info: TMDBTitle) in info.title.compare(query, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
-                        let sameYear = { (info: TMDBTitle) in year.map { info.releaseDate?.hasPrefix(String($0)) == true } ?? true }
-                        let cached = (favorites.pages + pages).compactMap(\.info).first { info in
-                            sameTitle(info) && info.mediaType == (filename.season == nil ? .movie : .tv) && sameYear(info)
+            .task { await Task.yield(); focused = pages.first(where: { $0.info == nil })?.id }
+            .task(id: pages.flatMap(\.media)) {
+                let media = pages.flatMap(\.media).filter { !MediaItem(url: $0).isImage }
+                let search = Task.detached(priority: .utility) { MediaItem.subtitleFiles(for: media) { Task.isCancelled } }
+                let found = await withTaskCancellationHandler { await search.value } onCancel: { search.cancel() }
+                if !Task.isCancelled { subtitled = Set(found.filter { !$0.value.isEmpty }.keys) }
+            }
+            .onExitCommand { if !favorites.saving { favorites.draft = nil } }
+            .accessibilityAddTraits(.isModal)
+            .task(id: [String(lookupAttempt)] + pages.flatMap { [$0.id.uuidString] + $0.lookupKey }) {
+                loading = true
+                defer { if !Task.isCancelled { loading = false } }
+                var waited = false
+                for (index, var updated) in pages.enumerated() {
+                    let id = updated.id
+                    let input = updated.lookupKey
+                    guard input != resolvedInputs[id], updated.clearedInfoTitle == nil,
+                          updated.info == nil || !updated.missingSeasons.isEmpty,
+                          let first = updated.media.first(where: { MediaItem(url: $0).isVideo }) else { continue }
+                    lookupStatus[id] = nil
+                    do {
+                        if !waited { try await Task.sleep(for: .milliseconds(400)); waited = true }
+                        if updated.info == nil {
+                            let filename = MediaFilename(first.deletingPathExtension().lastPathComponent)
+                            let name = MediaFilename(updated.title)
+                            let query = name.title.isEmpty ? filename.title : name.title
+                            guard !query.isEmpty else { continue }
+                            let year = name.year ?? filename.year
+                            let sameTitle = { (info: TMDBTitle) in info.title.compare(query, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
+                            let sameYear = { (info: TMDBTitle) in year.map { info.releaseDate?.hasPrefix(String($0)) == true } ?? true }
+                            let cached = (favorites.pages + pages).compactMap(\.info).first { info in
+                                sameTitle(info) && info.mediaType == (filename.season == nil ? .movie : .tv) && sameYear(info)
+                            }
+                            let matches: [TMDBTitle]
+                            if let cached { matches = [cached] }
+                            else { matches = try await TMDB.load(.init(query: query, type: filename.season == nil ? "multi" : "tv")).results ?? [] }
+                            try Task.checkCancellation()
+                            guard let match = matches.first(where: { sameTitle($0) && sameYear($0) }) ?? matches.first(where: sameTitle) ?? matches.first else {
+                                resolvedInputs[id] = input
+                                lookupStatus[id] = ("TMDB found no match. Check the name and search again.", false)
+                                continue
+                            }
+                            updated.info = match
+                            updated.title = match.title
+                            let existing = favorites.pages.first { $0.info?.id == match.id && $0.info?.mediaType == match.mediaType }
+                            updated.episodeTitles = existing?.episodeTitles
+                            updated.episodeImages = existing?.episodeImages
                         }
-                        let matches: [TMDBTitle]
-                        if let cached { matches = [cached] }
-                        else { matches = try await TMDB.load(.init(query: query, type: filename.season == nil ? "multi" : "tv")).results ?? [] }
+                        let complete = try await updated.loadEpisodes()
                         try Task.checkCancellation()
-                        guard let match = matches.first(where: { sameTitle($0) && sameYear($0) }) ?? matches.first(where: sameTitle) ?? matches.first else {
-                            resolvedInputs[id] = input
-                            lookupStatus[id] = ("TMDB found no match. Check the name and search again.", false)
-                            continue
-                        }
-                        updated.info = match
-                        updated.title = match.title
-                        let existing = favorites.pages.first { $0.info?.id == match.id && $0.info?.mediaType == match.mediaType }
-                        updated.episodeTitles = existing?.episodeTitles
-                        updated.episodeImages = existing?.episodeImages
+                        guard pages.indices.contains(index), pages[index].id == id,
+                              input == pages[index].lookupKey,
+                              pages[index].clearedInfoTitle == nil else { return }
+                        if !complete { lookupStatus[id] = ("Some episode information is unavailable. You can save without it.", true) }
+                        pages[index].info = updated.info
+                        pages[index].clearedInfoTitle = nil
+                        pages[index].episodeTitles = updated.episodeTitles
+                        pages[index].episodeImages = updated.episodeImages
+                        resolvedInputs[id] = updated.lookupKey
+                        pages[index].title = updated.title
+                    } catch {
+                        if Task.isCancelled { return }
+                        resolvedInputs[id] = input
+                        lookupStatus[id] = ("TMDB information is unavailable. Try again.", true)
                     }
-                    let complete = try await updated.loadEpisodes()
-                    try Task.checkCancellation()
-                    guard pages.indices.contains(index), pages[index].id == id,
-                          input == pages[index].lookupKey,
-                          pages[index].clearedInfoTitle == nil else { return }
-                    if !complete { lookupStatus[id] = ("Some episode information is unavailable. You can save without it.", true) }
-                    pages[index].info = updated.info
-                    pages[index].clearedInfoTitle = nil
-                    pages[index].episodeTitles = updated.episodeTitles
-                    pages[index].episodeImages = updated.episodeImages
-                    resolvedInputs[id] = updated.lookupKey
-                    pages[index].title = updated.title
-                } catch {
-                    if Task.isCancelled { return }
-                    resolvedInputs[id] = input
-                    lookupStatus[id] = ("TMDB information is unavailable. Try again.", true)
                 }
             }
-        }
     }
 }
 
