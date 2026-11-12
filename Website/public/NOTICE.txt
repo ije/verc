@@ -1,0 +1,15 @@
+Verc website
+Copyright (C) 2026 Verc contributors
+SPDX-License-Identifier: GPL-2.0-only
+
+Source: https://github.com/ije/verc/tree/main/Website
+License: LICENSE.txt
+
+The WebGPU prism ports Verc's Metal scene, adapted from vgpu by Vercel.
+Copyright (c) 2025 Vercel, Inc.
+Its MIT license is in Vgpu-LICENSE.txt.
+Source: https://github.com/vercel-labs/vgpu/tree/9c23f6c02db06cff4a4c4d38656c0e6f1bda203f/apps/docs/app/%5Blang%5D/%28home%29/components/prism-background
+
+Movie and TV artwork and metadata are from TMDB. This product uses the TMDB
+API but is not endorsed or certified by TMDB. TMDB terms apply to its logo.
+Source: https://www.themoviedb.org/

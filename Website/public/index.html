@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#08090a">
+    <meta name="description" content="Verc. A media player for Mac. Your media, in a new light.">
+    <title>Verc — Your media, in a new light.</title>
+    <link rel="canonical" href="https://verc.download/">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://verc.download/">
+    <meta property="og:title" content="Verc — Your media, in a new light.">
+    <meta property="og:description" content="A media player for Mac.">
+    <meta property="og:image" content="https://verc.download/prism-fallback.png">
+    <meta property="og:image:width" content="1280">
+    <meta property="og:image:height" content="720">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="icon" type="image/png" href="/logo.png">
+    <link rel="apple-touch-icon" href="/logo.png">
+    <link rel="stylesheet" href="/style.css">
+    <link rel="modulepreload" href="/scene.js">
+    <script type="module" src="/prism.js"></script>
+    <script type="module" src="/library.js"></script>
+</head>
+<body>
+    <header>
+        <a class="logo" href="/" aria-label="Verc home"><img src="/logo.png" width="52" height="52" alt="Verc"></a>
+        <a class="github" href="https://github.com/ije/verc" aria-label="Verc on GitHub">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .9a11.1 11.1 0 0 0-3.51 21.63c.56.1.76-.24.76-.54v-2.07c-3.1.67-3.75-1.32-3.75-1.32-.5-1.28-1.23-1.62-1.23-1.62-1.01-.69.08-.67.08-.67 1.12.08 1.71 1.14 1.71 1.14.99 1.7 2.6 1.21 3.23.93.1-.72.39-1.21.71-1.49-2.48-.28-5.08-1.24-5.08-5.52 0-1.22.44-2.21 1.14-3-.11-.28-.49-1.42.11-2.96 0 0 .94-.3 3.05 1.14A10.6 10.6 0 0 1 12 6.18c.94 0 1.88.13 2.76.37 2.11-1.43 3.04-1.14 3.04-1.14.61 1.54.23 2.68.12 2.96.71.79 1.14 1.78 1.14 3.01 0 4.29-2.61 5.23-5.1 5.51.4.34.76 1.02.76 2.06v3.04c0 .3.2.65.77.54A11.1 11.1 0 0 0 12 .9Z"/></svg>
+        </a>
+    </header>
+    <main>
+        <section class="hero" aria-labelledby="title">
+            <h1 id="title">Your media.<br>In a new light.</h1>
+            <a class="download" href="https://github.com/ije/verc/releases">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M17.05 12.54c.03 3.23 2.84 4.31 2.87 4.32-.02.08-.45 1.54-1.48 3.05-.9 1.3-1.83 2.6-3.3 2.63-1.44.04-1.91-.85-3.56-.85-1.64 0-2.16.82-3.53.89-1.42.05-2.5-1.42-3.4-2.72-1.85-2.67-3.26-7.55-1.36-10.85a5.28 5.28 0 0 1 4.47-2.72c1.4-.03 2.72.94 3.56.94.83 0 2.4-1.16 4.04-.99.69.03 2.64.28 3.9 2.12-.1.06-2.33 1.36-2.3 4.18ZM14.34 4.48c.75-.9 1.25-2.15 1.11-3.4-1.08.04-2.38.72-3.16 1.62-.69.8-1.3 2.08-1.14 3.3 1.2.09 2.43-.61 3.19-1.52Z"/></svg>
+                Download for macOS
+            </a>
+            <p class="requires">Free and open source. Requires macOS 26 on Apple silicon.</p>
+        </section>
+        <div class="player" data-view="prism" role="region" aria-label="Verc player preview">
+            <img class="fallback" src="/prism-fallback.png" alt="" width="1280" height="720" fetchpriority="high">
+            <canvas aria-hidden="true"></canvas>
+            <div class="window-ui">
+                <div class="gallery" hidden>
+                    <img class="backdrop" alt="">
+                    <div class="gallery-track" tabindex="0" aria-label="Movie and episode gallery">
+                        <div class="details">
+                            <img class="poster" alt="">
+                            <div class="description">
+                                <div class="description-scroll"><h2></h2><p class="metadata"></p><p class="overview"></p><dl class="credits"></dl></div>
+                                <a class="tmdb-link" target="_blank" rel="noreferrer"><img src="/tmdb.svg" alt="TMDB">More Info <span aria-hidden="true">↗</span></a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="library" hidden>
+                    <div class="library-toolbar"><label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input type="search" placeholder="Search" aria-label="Search library"></label><span class="count">5 items</span></div>
+                    <div class="posters"></div>
+                    <p class="no-results" hidden>No results</p>
+                </div>
+                <div class="chrome">
+                    <div class="traffic" aria-hidden="true"><i></i><i></i><i></i></div>
+                    <span class="window-title"></span>
+                    <button class="info" popovertarget="about" aria-label="About Verc">i</button>
+                    <span class="hint" aria-hidden="true">Drop media here or double-click to open.</span>
+                    <nav class="dock" aria-label="Preview library">
+                        <button class="page-dot selected" data-page="0" aria-label="Show prism" aria-pressed="true"><i></i></button>
+                        <button class="page-dot" data-page="1" aria-label="Show Yi Yi" aria-pressed="false"><i></i></button>
+                        <button class="page-dot" data-page="2" aria-label="Show The Wire" aria-pressed="false"><i></i></button>
+                        <button class="page-dot" data-page="3" aria-label="Show Scavengers Reign" aria-pressed="false"><i></i></button>
+                        <button class="page-dot" data-page="4" aria-label="Show The Matrix" aria-pressed="false"><i></i></button>
+                        <button class="page-dot" data-page="5" aria-label="Show Cowboy Bebop" aria-pressed="false"><i></i></button>
+                        <button class="library-toggle" aria-label="Open library" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8M6 6h12"/><rect x="5" y="9" width="14" height="12" rx="2" fill="currentColor" stroke="none"/><path d="m10 12 5 3-5 3Z" fill="#252525" stroke="none"/></svg></button>
+                        <span class="divider"></span><a href="https://github.com/ije/verc/releases" aria-label="Download Verc to add your media" title="Download Verc to add your media"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></a>
+                    </nav>
+                    <div class="poster-tooltip" hidden>
+                        <svg class="poster-shadow" viewBox="0 0 108 164" aria-hidden="true">
+                            <use href="#poster-outline" fill="#000" opacity=".25" filter="url(#poster-shadow-blur)"/>
+                        </svg>
+                        <div class="poster-glass">
+                            <img alt="">
+                            <svg viewBox="0 0 108 164" aria-hidden="true">
+                                <defs>
+                                    <path id="poster-outline" d="M10 0H98A10 10 0 0 1 108 10V146A10 10 0 0 1 98 156H61.05L55.33 162.67Q54 164 52.67 162.67L46.95 156H10A10 10 0 0 1 0 146V10A10 10 0 0 1 10 0Z"/>
+                                    <clipPath id="poster-clip"><use href="#poster-outline"/></clipPath>
+                                    <filter id="poster-shadow-blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="8"/></filter>
+                                </defs>
+                                <use href="#poster-outline" fill="none" stroke="#ffffff29" stroke-width="1"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div id="about" popover>
+                        <img src="/logo.png" width="56" height="56" alt="">
+                        <strong>Verc</strong><p>A media player for Mac.</p>
+                        <p>Verc uses <a href="https://www.videolan.org/vlc/" target="_blank" rel="noreferrer">VLC</a> by VideoLAN for media playback.</p>
+                        <p>The prism shader is borrowed from the <a href="https://vgpu.sh" target="_blank" rel="noreferrer">vgpu.sh</a> home page by Vercel.</p>
+                        <a href="https://www.themoviedb.org/" target="_blank" rel="noreferrer"><img src="/tmdb.svg" alt="TMDB" width="78"></a>
+                        <p>This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <footer>
+        <span>© 2026 Verc contributors</span>
+        <nav aria-label="Legal"><a href="/LICENSE.txt">License</a><a href="/NOTICE.txt">Notices</a></nav>
+    </footer>
+</body>
+</html>
