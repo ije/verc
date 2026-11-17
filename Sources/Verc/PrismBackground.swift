@@ -134,7 +134,7 @@ private final class PrismResources: @unchecked Sendable {
     enum Blend { case replace, additive, premultiplied }
 
     let queue: any MTLCommandQueue
-    let light, glassBack, glassFront, copy, extract, packedBlur, wideBlur, particle, composite, present, reveal, dust: any MTLRenderPipelineState
+    let light, glassBack, glassFront, copy, extract, packedBlur, wideBlur, particle, composite, present, antialias, reveal, dust: any MTLRenderPipelineState
     let glassVertices, glassIndices, spectrum: any MTLBuffer
     let glassIndexCount: Int
     let environment: any MTLTexture
@@ -167,7 +167,8 @@ private final class PrismResources: @unchecked Sendable {
         wideBlur = try pipeline("screenVertex", "bloomBlur", .rgba16Float)
         particle = try pipeline("screenVertex", "particleLight", .rgba16Float)
         composite = try pipeline("screenVertex", "bloomComposite", .rg11b10Float)
-        present = try pipeline("screenVertex", "presentScene", .bgra8Unorm)
+        present = try pipeline("screenVertex", "presentScene", .rgba16Float)
+        antialias = try pipeline("screenVertex", "antialiasScene", .bgra8Unorm)
         reveal = try pipeline("screenVertex", "revealScene", .bgra8Unorm)
         dust = try pipeline("dustVertex", "dustFragment", .bgra8Unorm, blend: .additive)
 
@@ -282,7 +283,7 @@ private final class PrismResources: @unchecked Sendable {
     private var lightIndex = 0
     private var targets: Targets?
     private var uniforms = Uniforms()
-    private static let restingAim = Vec(0.022, 0.45)
+    private static let restingAim = Vec(0.97, 0.85)
     private var aim = restingAim, aimTarget = restingAim
     private var orbit = Vec.zero, orbitTarget = Vec.zero
     private var builtLight: (aim: Vec, wall: Vec)?
@@ -528,6 +529,7 @@ private final class PrismResources: @unchecked Sendable {
         blur(3, from: bloom[3].vertical, horizontal: true)
         blur(3, from: bloom[3].horizontal, horizontal: false)
         pass(command, bloom[0].horizontal) { fullscreen($0, resources.composite, [bloom[0].vertical, bloom[1].vertical, bloom[2].vertical]) }
-        pass(command, targets.presentation) { fullscreen($0, resources.present, [targets.scene, bloom[0].horizontal]) }
+        pass(command, targets.backdrop) { fullscreen($0, resources.present, [targets.scene, bloom[0].horizontal]) }
+        pass(command, targets.presentation) { fullscreen($0, resources.antialias, [targets.backdrop]) }
     }
 }

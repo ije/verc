@@ -382,6 +382,36 @@ fragment float4 presentScene(ScreenVertex in [[stage_in]], texture2d<float> scen
     return float4(linearToSrgb(tonemapAces(max(color, 0.0))), 1);
 }
 
+fragment float4 antialiasScene(ScreenVertex in [[stage_in]], texture2d<float> source [[texture(0)]]) {
+    float2 texel = 1.0 / float2(source.get_width(), source.get_height());
+    float3 center = source.read(uint2(in.position.xy)).rgb;
+    float3 nw = source.sample(linearClamp, in.uv + float2(-1, -1) * texel, level(0)).rgb;
+    float3 ne = source.sample(linearClamp, in.uv + float2(1, -1) * texel, level(0)).rgb;
+    float3 sw = source.sample(linearClamp, in.uv + float2(-1, 1) * texel, level(0)).rgb;
+    float3 se = source.sample(linearClamp, in.uv + float2(1, 1) * texel, level(0)).rgb;
+    const float3 luma = float3(0.299, 0.587, 0.114);
+    float middle = dot(center, luma);
+    float4 neighbors = float4(dot(nw, luma), dot(ne, luma), dot(sw, luma), dot(se, luma));
+    float low = min(middle, min(min(neighbors.x, neighbors.y), min(neighbors.z, neighbors.w)));
+    float high = max(middle, max(max(neighbors.x, neighbors.y), max(neighbors.z, neighbors.w)));
+    float contrast = high - low;
+    if (contrast < max(0.03125, high * 0.125)) return float4(center, 1);
+
+    float average = dot(neighbors, float4(0.25));
+    float2 direction = float2(neighbors.z + neighbors.w - neighbors.x - neighbors.y,
+                              neighbors.x + neighbors.z - neighbors.y - neighbors.w);
+    float reduction = max(average * 0.125, 0.0078125);
+    direction = clamp(direction / (min(abs(direction.x), abs(direction.y)) + reduction), -8.0, 8.0) * texel;
+    float3 narrow = (source.sample(linearClamp, in.uv - direction / 6.0, level(0)).rgb
+                  + source.sample(linearClamp, in.uv + direction / 6.0, level(0)).rgb) * 0.5;
+    float3 wide = narrow * 0.5 + (source.sample(linearClamp, in.uv - direction * 0.5, level(0)).rgb
+                               + source.sample(linearClamp, in.uv + direction * 0.5, level(0)).rgb) * 0.25;
+    float brightness = dot(wide, luma);
+    float3 filtered = brightness < low || brightness > high ? narrow : wide;
+    float subpixel = smoothstep(0.0, 1.0, abs(middle - average) / contrast);
+    return float4(mix(filtered, (nw + ne + sw + se) * 0.25, subpixel * subpixel * 0.5), 1);
+}
+
 fragment float4 revealScene(ScreenVertex in [[stage_in]], texture2d<float> presented [[texture(0)]],
                             constant Scene &s [[buffer(1)]]) {
     return float4(presented.read(uint2(in.position.xy)).rgb * saturate(s.timing.y), 1);
