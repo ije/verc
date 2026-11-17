@@ -40,7 +40,9 @@ fi
 hdiutil verify "$work/Verc.dmg"
 # Gatekeeper rejects a DMG without a stapled notarization ticket on other Macs.
 if [[ -n ${NOTARY_PROFILE:-} ]]; then
-  xcrun notarytool submit "$work/Verc.dmg" --keychain-profile "$NOTARY_PROFILE" --wait
+  credentials=(--keychain-profile "$NOTARY_PROFILE")
+  if [[ -n ${NOTARY_KEYCHAIN:-} ]]; then credentials+=(--keychain "$NOTARY_KEYCHAIN"); fi
+  xcrun notarytool submit "$work/Verc.dmg" "${credentials[@]}" --wait --timeout 30m
   xcrun stapler staple "$work/Verc.dmg"
   xcrun stapler validate "$work/Verc.dmg"
 else

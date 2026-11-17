@@ -98,27 +98,36 @@ jobs:
           codesign --verify --deep --strict dist/Verc.app
           spctl --assess --type execute --verbose dist/Verc.app
 
-      - name: Create release archive
+      - name: Install DMG tools
         run: |
+          python3 -m venv "$RUNNER_TEMP/dmgbuild"
+          "$RUNNER_TEMP/dmgbuild/bin/pip" install dmgbuild==1.6.7
+          echo "$RUNNER_TEMP/dmgbuild/bin" >> "$GITHUB_PATH"
+
+      - name: Create release DMG
+        env:
+          NOTARY_PROFILE: verc
+        run: |
+          export NOTARY_KEYCHAIN="$RUNNER_TEMP/verc-signing.keychain-db"
+          ./scripts/dmg.sh
           cd dist
-          archive="Verc-$GITHUB_REF_NAME-arm64.zip"
-          ditto -c -k --keepParent Verc.app "$archive"
-          shasum -a 256 "$archive" > "$archive.sha256"
+          archive="Verc-${GITHUB_REF_NAME#v}-arm64.dmg"
+          shasum -a 256 "$archive" vlc-3.0.24.tar.xz > SHA256SUMS
 
       - name: Create draft release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          archive="dist/Verc-$GITHUB_REF_NAME-arm64.zip"
+          assets=("dist/Verc-${GITHUB_REF_NAME#v}-arm64.dmg" dist/vlc-3.0.24.tar.xz dist/SHA256SUMS)
           if gh release view "$GITHUB_REF_NAME" --json isDraft > "$RUNNER_TEMP/release.json"; then
             if ! jq -e '.isDraft' "$RUNNER_TEMP/release.json" > /dev/null; then
               echo '::error::This release is already public. Use a new version tag.'
               exit 1
             fi
-            gh release upload "$GITHUB_REF_NAME" "$archive" "$archive.sha256" --clobber
+            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "$archive" "$archive.sha256" \
+            gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
               --verify-tag --draft --title "Verc $GITHUB_REF_NAME" --generate-notes
           fi
 
