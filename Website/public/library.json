@@ -785,16 +785,11 @@
     "credits": [
       {
         "role": "Director",
-        "names": [
-          "Emir Kusturica"
-        ]
+        "names": ["Emir Kusturica"]
       },
       {
         "role": "Writer",
-        "names": [
-          "Emir Kusturica",
-          "Gordan Mihić"
-        ]
+        "names": ["Emir Kusturica", "Gordan Mihić"]
       },
       {
         "role": "Cast",
@@ -829,17 +824,11 @@
     "credits": [
       {
         "role": "Director",
-        "names": [
-          "Theo Angelopoulos"
-        ]
+        "names": ["Theo Angelopoulos"]
       },
       {
         "role": "Writer",
-        "names": [
-          "Petros Markaris",
-          "Tonino Guerra",
-          "Theo Angelopoulos"
-        ]
+        "names": ["Petros Markaris", "Tonino Guerra", "Theo Angelopoulos"]
       },
       {
         "role": "Cast",

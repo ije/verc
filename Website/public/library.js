@@ -19,7 +19,11 @@ let items = [],
   selected = 0;
 
 function resize() {
-  const scale = Math.min(1, player.clientWidth / 640, player.clientHeight / 360);
+  const scale = Math.min(
+    1,
+    player.clientWidth / 640,
+    player.clientHeight / 360,
+  );
   const width = player.clientWidth / scale,
     height = player.clientHeight / scale;
   const cardWidth = Math.min(
@@ -161,8 +165,7 @@ try {
   const response = await fetch("/library.json");
   if (!response.ok) throw new Error("Unable to load the preview library.");
   items = await response.json();
-  count.textContent =
-    `${items.length} ${items.length === 1 ? "item" : "items"}`;
+  count.textContent = `${items.length} ${items.length === 1 ? "item" : "items"}`;
   for (const [index, item] of items.entries()) {
     if (dots.length < 5) {
       const dot = document.createElement("button");

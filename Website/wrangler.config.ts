@@ -1,3 +1,3 @@
 export default {
-    assetsDirectory: "public",
+  assetsDirectory: "public",
 };

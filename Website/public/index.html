@@ -26,7 +26,13 @@
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="icon" type="image/png" href="/logo.png" />
     <link rel="apple-touch-icon" href="/logo.png" />
-    <link rel="preload" href="/fonts/geist-sans.woff2" as="font" type="font/woff2" crossorigin />
+    <link
+      rel="preload"
+      href="/fonts/geist-sans.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <link rel="stylesheet" href="/style.css" />
     <link rel="modulepreload" href="/scene.js" />
     <script type="module" src="/prism.js"></script>
@@ -75,246 +81,415 @@
         </p>
       </section>
       <div class="player-stage">
-      <div
-        class="player"
-        data-view="prism"
-        role="region"
-        aria-label="Verc player preview"
-      >
-        <img
-          class="fallback"
-          src="/prism-fallback.png"
-          alt=""
-          width="1280"
-          height="720"
-          fetchpriority="high"
-        />
-        <canvas aria-hidden="true"></canvas>
-        <div class="trailer" hidden></div>
-        <div class="window-ui">
-          <div class="playback" hidden>
-            <button class="playback-surface" aria-label="Pause trailer">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 4.5a1 1 0 0 1 1.5-.86l12 7.5a1 1 0 0 1 0 1.72l-12 7.5A1 1 0 0 1 7 19.5Z" /></svg>
-            </button>
-            <div class="playback-status" role="status">
-              <span>Loading trailer…</span>
-              <a class="trailer-external" target="_blank" rel="noreferrer" hidden>Watch on YouTube ↗</a>
-            </div>
-            <div class="transport">
-              <div class="volume-control">
-                <button class="volume-button" aria-label="Volume" aria-expanded="false" title="Volume · M to mute">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" stroke="none" d="M3 9h4l5-4v14l-5-4H3a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Z" /><path class="volume-waves" d="M15 8a7 7 0 0 1 0 8m3-11a12 12 0 0 1 0 14" /><path class="volume-slash" d="m15 9 6 6m0-6-6 6" /></svg>
-                </button>
-                <div class="volume-panel playback-panel glass" hidden>
-                  <svg class="volume-outline" width="56" height="248" viewBox="0 0 56 248" aria-hidden="true">
-                    <defs>
-                      <path id="volume-shape" d="M20 .5h16C47 .5 55.5 9 55.5 20v195c0 10-5.5 16-13.5 19l-11 11c-1.7 1.8-4.3 1.8-6 0l-11-11C6 231 .5 225 .5 215V20C.5 9 9 .5 20 .5Z" />
-                      <clipPath id="volume-clip"><use href="#volume-shape" /></clipPath>
-                    </defs>
-                    <use href="#volume-shape" stroke="#000a" stroke-width="1.5" />
-                    <use href="#volume-shape" stroke="#ffffff40" stroke-width="0.5" />
-                  </svg>
-                  <output>100%</output>
-                  <input type="range" min="0" max="100" value="100" aria-label="Volume" />
-                  <button class="mute-button" aria-label="Mute" aria-pressed="false" title="Mute">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" stroke="none" d="M3 9h4l5-4v14l-5-4H3a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Z" /><path class="volume-waves" d="M15 8a7 7 0 0 1 0 8m3-11a12 12 0 0 1 0 14" /><path class="volume-slash" d="m15 9 6 6m0-6-6 6" /></svg>
-                  </button>
-                </div>
-              </div>
-              <div class="captions-control">
-                <button class="captions-button" aria-label="Subtitles" aria-expanded="false" title="Subtitles" disabled>
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3h-7l-5 4v-4H5a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Z" /><path d="M6 9h5m3 0h4M6 13h3m3 0h6" /></svg>
-                </button>
-                <div class="captions-panel playback-panel glass" hidden>
-                  <label>Subtitle size<select aria-label="Subtitle size"><option value="-1">Small</option><option value="0" selected>Default</option><option value="1">Large</option><option value="2">Extra Large</option></select></label>
-                </div>
-              </div>
-              <span class="elapsed">0:00</span>
-              <input class="timeline" type="range" min="0" max="1" step="0.1" value="0" aria-label="Playback position" disabled />
-              <span class="duration">—</span>
-              <button class="pip-button" aria-label="Picture in Picture unavailable" title="Picture in Picture is unavailable for YouTube trailers" disabled>
-                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="17" height="13" rx="2" /><rect x="11" y="11" width="12" height="10" rx="2" fill="currentColor" stroke="none" /><path d="m5 6 4 4m-4 0h4V6" /></svg>
-              </button>
-              <button class="fullscreen-button" aria-label="Enter fullscreen" title="Enter fullscreen · F">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10V4h6M4 4l6 6m10 4v6h-6m6 0-6-6" /></svg>
-              </button>
-            </div>
-          </div>
-          <div class="gallery" hidden>
-            <img class="backdrop" alt="" />
-            <div
-              class="gallery-track"
-              tabindex="0"
-              aria-label="Movie and episode gallery"
-            >
-              <div class="details">
-                <img class="poster" alt="" />
-                <div class="description">
-                  <div class="description-scroll">
-                    <h2></h2>
-                    <p class="metadata"></p>
-                    <p class="overview"></p>
-                    <dl class="credits"></dl>
-                  </div>
-                  <div class="media-actions">
-                    <button class="trailer-button media-action glass" type="button">
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 4.5a1 1 0 0 1 1.5-.86l12 7.5a1 1 0 0 1 0 1.72l-12 7.5A1 1 0 0 1 7 19.5Z" /></svg>
-                      Play Trailer
-                    </button>
-                    <a class="tmdb-link media-action glass" target="_blank" rel="noreferrer"
-                      ><img src="/tmdb.svg" alt="TMDB" />More Info
-                      <span aria-hidden="true">↗</span></a
-                    >
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="library" hidden>
-            <div class="library-toolbar">
-              <label class="search glass"
-                ><svg viewBox="0 0 24 24" aria-hidden="true">
-                  <circle cx="10.5" cy="10.5" r="6.5" />
-                  <path d="m16 16 5 5" /></svg
-                ><input
-                  type="search"
-                  placeholder="Search"
-                  aria-label="Search library" /></label
-              ><span class="count"></span>
-            </div>
-            <div class="posters"></div>
-            <p class="no-results" hidden>No results</p>
-          </div>
-          <div class="chrome">
-            <div class="traffic" aria-hidden="true"><i></i><i></i><i></i></div>
-            <span class="window-title"></span>
-            <button class="trailer-close glass" aria-label="Back to details" title="Back to details · Escape" hidden>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg>
-            </button>
-            <button class="info glass" popovertarget="about" aria-label="About Verc">
-              i
-            </button>
-            <nav class="dock glass" aria-label="Preview library">
-              <button
-                class="page-dot selected"
-                aria-label="Show prism"
-                aria-pressed="true"
-              >
-                <i></i>
-              </button>
-              <button
-                class="library-toggle"
-                aria-label="Open library"
-                aria-pressed="false"
-              >
+        <div
+          class="player"
+          data-view="prism"
+          role="region"
+          aria-label="Verc player preview"
+        >
+          <img
+            class="fallback"
+            src="/prism-fallback.png"
+            alt=""
+            width="1280"
+            height="720"
+            fetchpriority="high"
+          />
+          <canvas aria-hidden="true"></canvas>
+          <div class="trailer" hidden></div>
+          <div class="window-ui">
+            <div class="playback" hidden>
+              <button class="playback-surface" aria-label="Pause trailer">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M8 3h8M6 6h12" />
-                  <rect
-                    x="5"
-                    y="9"
-                    width="14"
-                    height="12"
-                    rx="2"
+                  <path
                     fill="currentColor"
-                    stroke="none"
+                    d="M7 4.5a1 1 0 0 1 1.5-.86l12 7.5a1 1 0 0 1 0 1.72l-12 7.5A1 1 0 0 1 7 19.5Z"
                   />
-                  <path d="m10 12 5 3-5 3Z" fill="#252525" stroke="none" />
                 </svg>
               </button>
-              <span class="divider"></span
-              ><a href="#" aria-label="Add media"
-                ><svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 5v14M5 12h14" /></svg
-              ></a>
-            </nav>
-            <div class="poster-tooltip" hidden>
-              <svg
-                class="poster-shadow"
-                viewBox="0 0 108 164"
-                aria-hidden="true"
-              >
-                <use
-                  href="#poster-outline"
-                  fill="#000"
-                  opacity=".25"
-                  filter="url(#poster-shadow-blur)"
-                />
-              </svg>
-              <div class="poster-glass">
-                <img alt="" />
-                <svg viewBox="0 0 108 164" aria-hidden="true">
-                  <defs>
-                    <path
-                      id="poster-outline"
-                      d="M10 0H98A10 10 0 0 1 108 10V146A10 10 0 0 1 98 156H61.05L55.33 162.67Q54 164 52.67 162.67L46.95 156H10A10 10 0 0 1 0 146V10A10 10 0 0 1 10 0Z"
-                    />
-                    <clipPath id="poster-clip">
-                      <use href="#poster-outline" />
-                    </clipPath>
-                    <filter
-                      id="poster-shadow-blur"
-                      x="-50%"
-                      y="-50%"
-                      width="200%"
-                      height="200%"
-                    >
-                      <feGaussianBlur stdDeviation="8" />
-                    </filter>
-                  </defs>
-                  <use
-                    href="#poster-outline"
-                    fill="none"
-                    stroke="#ffffff29"
-                    stroke-width="1"
-                  />
-                </svg>
-              </div>
-            </div>
-            <div id="about" class="glass" popover>
-              <img src="/about-logo.svg" width="64"  alt="" />
-              <p>
-                Verc uses
+              <div class="playback-status" role="status">
+                <span>Loading trailer…</span>
                 <a
-                  href="https://www.videolan.org/vlc/"
+                  class="trailer-external"
                   target="_blank"
                   rel="noreferrer"
-                  >VLC</a
+                  hidden
+                  >Watch on YouTube ↗</a
                 >
-                by VideoLAN for media playback.
-              </p>
-              <p>
-                The prism shader is borrowed from the
-                <a href="https://vgpu.sh" target="_blank" rel="noreferrer"
-                  >vgpu.sh</a
+              </div>
+              <div class="transport">
+                <div class="volume-control">
+                  <button
+                    class="volume-button"
+                    aria-label="Volume"
+                    aria-expanded="false"
+                    title="Volume · M to mute"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        fill="currentColor"
+                        stroke="none"
+                        d="M3 9h4l5-4v14l-5-4H3a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Z"
+                      />
+                      <path
+                        class="volume-waves"
+                        d="M15 8a7 7 0 0 1 0 8m3-11a12 12 0 0 1 0 14"
+                      />
+                      <path class="volume-slash" d="m15 9 6 6m0-6-6 6" />
+                    </svg>
+                  </button>
+                  <div class="volume-panel playback-panel glass" hidden>
+                    <svg
+                      class="volume-outline"
+                      width="56"
+                      height="248"
+                      viewBox="0 0 56 248"
+                      aria-hidden="true"
+                    >
+                      <defs>
+                        <path
+                          id="volume-shape"
+                          d="M20 .5h16C47 .5 55.5 9 55.5 20v195c0 10-5.5 16-13.5 19l-11 11c-1.7 1.8-4.3 1.8-6 0l-11-11C6 231 .5 225 .5 215V20C.5 9 9 .5 20 .5Z"
+                        />
+                        <clipPath id="volume-clip">
+                          <use href="#volume-shape" />
+                        </clipPath>
+                      </defs>
+                      <use
+                        href="#volume-shape"
+                        stroke="#000a"
+                        stroke-width="1.5"
+                      />
+                      <use
+                        href="#volume-shape"
+                        stroke="#ffffff40"
+                        stroke-width="0.5"
+                      />
+                    </svg>
+                    <output>100%</output>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value="100"
+                      aria-label="Volume"
+                    />
+                    <button
+                      class="mute-button"
+                      aria-label="Mute"
+                      aria-pressed="false"
+                      title="Mute"
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          fill="currentColor"
+                          stroke="none"
+                          d="M3 9h4l5-4v14l-5-4H3a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1Z"
+                        />
+                        <path
+                          class="volume-waves"
+                          d="M15 8a7 7 0 0 1 0 8m3-11a12 12 0 0 1 0 14"
+                        />
+                        <path class="volume-slash" d="m15 9 6 6m0-6-6 6" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="captions-control">
+                  <button
+                    class="captions-button"
+                    aria-label="Subtitles"
+                    aria-expanded="false"
+                    title="Subtitles"
+                    disabled
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        d="M5 3h14a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3h-7l-5 4v-4H5a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Z"
+                      />
+                      <path d="M6 9h5m3 0h4M6 13h3m3 0h6" />
+                    </svg>
+                  </button>
+                  <div class="captions-panel playback-panel glass" hidden>
+                    <label
+                      >Subtitle size<select aria-label="Subtitle size">
+                        <option value="-1">Small</option>
+                        <option value="0" selected>Default</option>
+                        <option value="1">Large</option>
+                        <option value="2">Extra Large</option>
+                      </select></label
+                    >
+                  </div>
+                </div>
+                <span class="elapsed">0:00</span>
+                <input
+                  class="timeline"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value="0"
+                  aria-label="Playback position"
+                  disabled
+                />
+                <span class="duration">—</span>
+                <button
+                  class="pip-button"
+                  aria-label="Picture in Picture unavailable"
+                  title="Picture in Picture is unavailable for YouTube trailers"
+                  disabled
                 >
-                home page by Vercel.
-              </p>
-              <a
-                href="https://www.themoviedb.org/"
-                target="_blank"
-                rel="noreferrer"
-                ><img src="/tmdb.svg" alt="TMDB" width="50"
-              /></a>
-              <p>
-                This product uses the TMDB API but is not endorsed or certified
-                by TMDB.
-              </p>
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="2" y="3" width="17" height="13" rx="2" />
+                    <rect
+                      x="11"
+                      y="11"
+                      width="12"
+                      height="10"
+                      rx="2"
+                      fill="currentColor"
+                      stroke="none"
+                    />
+                    <path d="m5 6 4 4m-4 0h4V6" />
+                  </svg>
+                </button>
+                <button
+                  class="fullscreen-button"
+                  aria-label="Enter fullscreen"
+                  title="Enter fullscreen · F"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 10V4h6M4 4l6 6m10 4v6h-6m6 0-6-6" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="gallery" hidden>
+              <img class="backdrop" alt="" />
+              <div
+                class="gallery-track"
+                tabindex="0"
+                aria-label="Movie and episode gallery"
+              >
+                <div class="details">
+                  <img class="poster" alt="" />
+                  <div class="description">
+                    <div class="description-scroll">
+                      <h2></h2>
+                      <p class="metadata"></p>
+                      <p class="overview"></p>
+                      <dl class="credits"></dl>
+                    </div>
+                    <div class="media-actions">
+                      <button
+                        class="trailer-button media-action glass"
+                        type="button"
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            fill="currentColor"
+                            d="M7 4.5a1 1 0 0 1 1.5-.86l12 7.5a1 1 0 0 1 0 1.72l-12 7.5A1 1 0 0 1 7 19.5Z"
+                          />
+                        </svg>
+                        Play Trailer
+                      </button>
+                      <a
+                        class="tmdb-link media-action glass"
+                        target="_blank"
+                        rel="noreferrer"
+                        ><img src="/tmdb.svg" alt="TMDB" />More Info
+                        <span aria-hidden="true">↗</span></a
+                      >
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="library" hidden>
+              <div class="library-toolbar">
+                <label class="search glass"
+                  ><svg viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="10.5" cy="10.5" r="6.5" />
+                    <path d="m16 16 5 5" /></svg
+                  ><input
+                    type="search"
+                    placeholder="Search"
+                    aria-label="Search library" /></label
+                ><span class="count"></span>
+              </div>
+              <div class="posters"></div>
+              <p class="no-results" hidden>No results</p>
+            </div>
+            <div class="chrome">
+              <div class="traffic" aria-hidden="true">
+                <i></i><i></i><i></i>
+              </div>
+              <span class="window-title"></span>
+              <button
+                class="trailer-close glass"
+                aria-label="Back to details"
+                title="Back to details · Escape"
+                hidden
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m6 6 12 12M6 18 18 6" />
+                </svg>
+              </button>
+              <button
+                class="info glass"
+                popovertarget="about"
+                aria-label="About Verc"
+              >
+                i
+              </button>
+              <nav class="dock glass" aria-label="Preview library">
+                <button
+                  class="page-dot selected"
+                  aria-label="Show prism"
+                  aria-pressed="true"
+                >
+                  <i></i>
+                </button>
+                <button
+                  class="library-toggle"
+                  aria-label="Open library"
+                  aria-pressed="false"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M8 3h8M6 6h12" />
+                    <rect
+                      x="5"
+                      y="9"
+                      width="14"
+                      height="12"
+                      rx="2"
+                      fill="currentColor"
+                      stroke="none"
+                    />
+                    <path d="m10 12 5 3-5 3Z" fill="#252525" stroke="none" />
+                  </svg>
+                </button>
+                <span class="divider"></span
+                ><a href="#" aria-label="Add media"
+                  ><svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 5v14M5 12h14" /></svg
+                ></a>
+              </nav>
+              <div class="poster-tooltip" hidden>
+                <svg
+                  class="poster-shadow"
+                  viewBox="0 0 108 164"
+                  aria-hidden="true"
+                >
+                  <use
+                    href="#poster-outline"
+                    fill="#000"
+                    opacity=".25"
+                    filter="url(#poster-shadow-blur)"
+                  />
+                </svg>
+                <div class="poster-glass">
+                  <img alt="" />
+                  <svg viewBox="0 0 108 164" aria-hidden="true">
+                    <defs>
+                      <path
+                        id="poster-outline"
+                        d="M10 0H98A10 10 0 0 1 108 10V146A10 10 0 0 1 98 156H61.05L55.33 162.67Q54 164 52.67 162.67L46.95 156H10A10 10 0 0 1 0 146V10A10 10 0 0 1 10 0Z"
+                      />
+                      <clipPath id="poster-clip">
+                        <use href="#poster-outline" />
+                      </clipPath>
+                      <filter
+                        id="poster-shadow-blur"
+                        x="-50%"
+                        y="-50%"
+                        width="200%"
+                        height="200%"
+                      >
+                        <feGaussianBlur stdDeviation="8" />
+                      </filter>
+                    </defs>
+                    <use
+                      href="#poster-outline"
+                      fill="none"
+                      stroke="#ffffff29"
+                      stroke-width="1"
+                    />
+                  </svg>
+                </div>
+              </div>
+              <div id="about" class="glass" popover>
+                <img src="/about-logo.svg" width="64" alt="" />
+                <p>
+                  Verc uses
+                  <a
+                    href="https://www.videolan.org/vlc/"
+                    target="_blank"
+                    rel="noreferrer"
+                    >VLC</a
+                  >
+                  by VideoLAN for media playback.
+                </p>
+                <p>
+                  The prism shader is borrowed from the
+                  <a href="https://vgpu.sh" target="_blank" rel="noreferrer"
+                    >vgpu.sh</a
+                  >
+                  home page by Vercel.
+                </p>
+                <a
+                  href="https://www.themoviedb.org/"
+                  target="_blank"
+                  rel="noreferrer"
+                  ><img src="/tmdb.svg" alt="TMDB" width="50"
+                /></a>
+                <p>
+                  This product uses the TMDB API but is not endorsed or
+                  certified by TMDB.
+                </p>
+              </div>
             </div>
           </div>
         </div>
       </div>
-      </div>
     </main>
     <footer>
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
         <!-- Icon from Griddy Icons by Zuzana Benova - https://github.com/griddy-icons/griddy-icons/blob/main/LICENSE -->
-        <path fill="currentColor" fill-rule="evenodd" d="m12 4.26l-1.563 2.737l-1.302-.744l1.78-3.114c.48-.847 1.689-.831 2.17-.006l.002.005l1.78 3.115l-1.302.744zm2.59 4.537l1.3 2.275l1.302-.744l-1.3-2.275zm3.588 6.28l-1.295-2.27l1.303-.744l1.295 2.27zm1.03 1.795l1.503 2.628H17.75V21h3.39a1.25 1.25 0 0 0 1.087-1.87l-1.716-3.002l-1.302.744ZM8.5 19.5H11V21H8.5zm4.5 0h2.75V21H13zm-4.887-8.428l1.3-2.275l-1.302-.744l-1.3 2.275zm-.998 1.735l-1.295 2.27l-1.302-.744l1.295-2.27zm-2.322 4.065L3.29 19.5h2.962V21h-3.39a1.25 1.25 0 0 1-1.088-1.87l.001-.002l1.715-3z" clip-rule="evenodd" />
+        <path
+          fill="currentColor"
+          fill-rule="evenodd"
+          d="m12 4.26l-1.563 2.737l-1.302-.744l1.78-3.114c.48-.847 1.689-.831 2.17-.006l.002.005l1.78 3.115l-1.302.744zm2.59 4.537l1.3 2.275l1.302-.744l-1.3-2.275zm3.588 6.28l-1.295-2.27l1.303-.744l1.295 2.27zm1.03 1.795l1.503 2.628H17.75V21h3.39a1.25 1.25 0 0 0 1.087-1.87l-1.716-3.002l-1.302.744ZM8.5 19.5H11V21H8.5zm4.5 0h2.75V21H13zm-4.887-8.428l1.3-2.275l-1.302-.744l-1.3 2.275zm-.998 1.735l-1.295 2.27l-1.302-.744l1.295-2.27zm-2.322 4.065L3.29 19.5h2.962V21h-3.39a1.25 1.25 0 0 1-1.088-1.87l.001-.002l1.715-3z"
+          clip-rule="evenodd"
+        />
       </svg>
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
         <!-- Icon from Lucide by Lucide Contributors - https://github.com/lucide-icons/lucide/blob/main/LICENSE -->
-        <path fill="currentColor" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" />
+        <path
+          fill="currentColor"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"
+        />
       </svg>
-      <p>Build with love by <a href="https://github.com/ije">@ije</a>, Under GNU GPL v2.0</p>
+      <p>
+        Build with love by <a href="https://github.com/ije">@ije</a>, Under GNU
+        GPL v2.0
+      </p>
     </footer>
   </body>
 </html>

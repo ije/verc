@@ -385,7 +385,11 @@ try {
       }
       presentGroup = textures([scene, ...bloom]);
       postprocessPasses.push(
-        { target: backdrop, pipeline: pipelines.composeScene, group: presentGroup },
+        {
+          target: backdrop,
+          pipeline: pipelines.composeScene,
+          group: presentGroup,
+        },
         { target: scene, pipeline: pipelines.antialiasScene, group: backGroup },
       );
       resized = false;

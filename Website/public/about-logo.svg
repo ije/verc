@@ -1,17 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 112 98">
-    <defs>
-        <linearGradient id="color" x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
-            <stop stop-color="#1ad9ff"/>
-            <stop offset=".33" stop-color="#6ebfff"/>
-            <stop offset=".67" stop-color="#ffa3f7"/>
-            <stop offset="1" stop-color="#ffd46e"/>
-        </linearGradient>
-        <radialGradient id="blue" cx="1" cy=".33" r=".8">
-            <stop stop-color="#00a1fa"/>
-            <stop offset="1" stop-color="#00a1fa" stop-opacity="0"/>
-        </radialGradient>
-        <path id="play" d="M28 14C28 4 34-1 44 5L102 39C113 45 113 53 102 59L44 93C34 99 28 94 28 84Z"/>
-    </defs>
-    <use href="#play" fill="url(#color)"/>
-    <use href="#play" fill="url(#blue)"/>
+  <defs>
+    <linearGradient id="color" x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#1ad9ff"/>
+      <stop offset=".33" stop-color="#6ebfff"/>
+      <stop offset=".67" stop-color="#ffa3f7"/>
+      <stop offset="1" stop-color="#ffd46e"/>
+    </linearGradient>
+    <radialGradient id="blue" cx="1" cy=".33" r=".8">
+      <stop stop-color="#00a1fa"/>
+      <stop offset="1" stop-color="#00a1fa" stop-opacity="0"/>
+    </radialGradient>
+    <path id="play" d="M28 14C28 4 34-1 44 5L102 39C113 45 113 53 102 59L44 93C34 99 28 94 28 84Z"/>
+  </defs>
+  <use href="#play" fill="url(#color)"/>
+  <use href="#play" fill="url(#blue)"/>
 </svg>
