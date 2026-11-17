@@ -31,8 +31,6 @@
  *****************************************************************************
  * This structure is a LibVLC instance, for use by libvlc core and plugins
  *****************************************************************************/
-struct libvlc_int_t
-{
-    VLC_COMMON_MEMBERS
+struct libvlc_int_t {
+  VLC_COMMON_MEMBERS
 };
-
