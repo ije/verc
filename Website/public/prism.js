@@ -10,7 +10,7 @@ import {
 const player = document.querySelector(".player"),
   canvas = player.querySelector("canvas");
 const motion = matchMedia("(prefers-reduced-motion: reduce)");
-const restingAim = [0.97, 0.85];
+const restingAim = [0.022, 0.45];
 let device,
   frame = 0,
   resizeObserver,

@@ -65,8 +65,6 @@ test("movie credits group and deduplicate people in role order", async () => {
       { role: "Director", names: ["Alice"] },
       { role: "Writer", names: ["Alice", "Bob"] },
       { role: "Cast", names: ["Erin", "Frank"] },
-      { role: "Producer", names: ["Chris"] },
-      { role: "Music", names: ["Dana"] },
     ],
   });
   expect(calls[0].url.pathname).toBe("/3/movie/603/credits");
@@ -75,9 +73,8 @@ test("movie credits group and deduplicate people in role order", async () => {
   expect(calls[0].options.signal).toBeInstanceOf(AbortSignal);
 });
 
-test("TV credits include creators and rank each job by episode count", async () => {
+test("TV credits rank each job by episode count", async () => {
   upstream = {
-    created_by: [{ name: "Creator" }],
     aggregate_credits: {
       crew: [
         { name: "Guest", jobs: [{ job: "Director", episode_count: 1 }] },
@@ -99,16 +96,16 @@ test("TV credits include creators and rank each job by episode count", async () 
   const { credits } = await (
     await post({ type: "tv", id: 1438, credits: true })
   ).json();
-  expect(credits[0]).toStrictEqual({ role: "Creator", names: ["Creator"] });
-  expect(credits[1]).toStrictEqual({
+  expect(credits.length).toBe(3);
+  expect(credits[0]).toStrictEqual({
     role: "Director",
     names: ["Lead", "Guest"],
   });
-  expect(credits[2]).toStrictEqual({
+  expect(credits[1]).toStrictEqual({
     role: "Writer",
     names: ["Writer", "Lead"],
   });
-  expect(credits[3].names).toStrictEqual([
+  expect(credits[2].names).toStrictEqual([
     "Actor 7",
     "Actor 6",
     "Actor 5",
@@ -185,6 +182,23 @@ test("search and season responses remain compatible", async () => {
     ],
   });
   expect(cache.size).toBe(2);
+});
+
+test("episodes without integer numbers are dropped and titles default to empty", async () => {
+  upstream = {
+    episodes: [
+      { season_number: 1, episode_number: 2, name: null, still_path: null },
+      { season_number: null, episode_number: 3, name: "No season" },
+      { season_number: 1, episode_number: "4", name: "String episode" },
+      { season_number: 1, episode_number: 5.5, name: "Fraction" },
+      null,
+    ],
+  };
+  expect(
+    await (await post({ type: "tv", id: 1, season: 1 })).json(),
+  ).toStrictEqual({
+    episodes: [{ season: 1, episode: 2, title: "", stillURL: null }],
+  });
 });
 
 test("invalid credit requests and oversized bodies never reach TMDB", async () => {

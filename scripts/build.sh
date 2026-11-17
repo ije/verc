@@ -61,6 +61,7 @@ location=$("${swift[@]}" --show-bin-path) || fail "Cannot locate the compiled ap
 cp "$location/Verc" "$app/Contents/MacOS/Verc"
 cp Resources/Info.plist "$app/Contents/Info.plist"
 cp Resources/app.icns Resources/Verc.png Resources/VercGlass.png Resources/VercPrism.png Resources/VercLibrary.icns Resources/TMDB.svg Resources/LineMD-LICENSE.txt Resources/Vgpu-LICENSE.txt LICENSE NOTICE "$app/Contents/Resources/"
+cp Vendor/VLC/COPYING.LIB "$app/Contents/Resources/VLC-COPYING.LIB.txt"
 xcrun -sdk macosx metal -mmacos-version-min=26.0 Sources/Verc/Prism.metal -o "$app/Contents/Resources/default.metallib" \
   || fail "Cannot compile the Metal shaders. Install the Metal Toolchain: xcodebuild -downloadComponent MetalToolchain"
 

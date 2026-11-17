@@ -38,6 +38,22 @@ if [[ ${SIGNING_IDENTITY:--} != - ]]; then
   codesign --force --sign "$SIGNING_IDENTITY" --timestamp "$work/Verc.dmg"
 fi
 hdiutil verify "$work/Verc.dmg"
+# Gatekeeper rejects a DMG without a stapled notarization ticket on other Macs.
+if [[ -n ${NOTARY_PROFILE:-} ]]; then
+  xcrun notarytool submit "$work/Verc.dmg" --keychain-profile "$NOTARY_PROFILE" --wait
+  xcrun stapler staple "$work/Verc.dmg"
+  xcrun stapler validate "$work/Verc.dmg"
+else
+  printf 'NOTARY_PROFILE is not set, so this DMG is not notarized. Use it only on this Mac.\n' >&2
+fi
 mv "$work/Verc.dmg" "$output"
-cp "$work/background.png" "$root/dist/Verc-DMG-background.png"
-printf '\n%s\n' "$output"
+# GPL: publish the VLC source next to every DMG. NOTICE names this file and checksum.
+source="$root/.build/vlc-3.0.24.tar.xz"
+if [[ ! -f $source ]]; then
+  curl --fail --location --silent --show-error --retry 3 \
+    https://download.videolan.org/pub/videolan/vlc/3.0.24/vlc-3.0.24.tar.xz -o "$work/vlc.tar.xz"
+  mv "$work/vlc.tar.xz" "$source"
+fi
+printf '%s  %s\n' e7cab503d1d7d5849b89d2cf0e1ee60d0ef6d012407791b644b9cfc0cc225fdf "$source" | shasum -a 256 -c - >/dev/null
+cp "$source" "$root/dist/"
+printf '\n%s\n%s\n' "$output" "$root/dist/vlc-3.0.24.tar.xz"

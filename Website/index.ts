@@ -162,12 +162,6 @@ export default {
       }
       if (!upstream.ok) return error("TMDB search is unavailable.", 502);
       const data = await upstream.json();
-      const list =
-        data?.[
-          imageLookup ? "backdrops" : episodeLookup ? "episodes" : "results"
-        ];
-      if (!credits && !Array.isArray(list))
-        return error("Invalid TMDB response.", 502);
       let payload;
       if (credits) {
         const people = type === "tv" ? data?.aggregate_credits : data;
@@ -175,20 +169,11 @@ export default {
           return error("Invalid TMDB response.", 502);
         const groups = [];
         for (const [role, jobs] of [
-          ["Creator", []],
           ["Director", ["Director"]],
           ["Writer", ["Writer", "Screenplay", "Teleplay", "Story"]],
           ["Cast", []],
-          ["Producer", ["Producer", "Executive Producer"]],
-          ["Music", ["Original Music Composer"]],
         ]) {
-          const members =
-            role === "Creator"
-              ? (data.created_by ?? [])
-              : role === "Cast"
-                ? people.cast
-                : people.crew;
-          const ranked = members
+          const ranked = (role === "Cast" ? people.cast : people.crew)
             .flatMap((person) => {
               if (typeof person?.name !== "string" || !person.name.trim())
                 return [];
@@ -217,48 +202,62 @@ export default {
           if (names.length) groups.push({ role, names });
         }
         payload = { credits: groups };
-      } else if (imageLookup) {
-        const paths = list
-          .map((item) => item?.file_path)
-          .filter((path) => typeof path === "string" && path.startsWith("/"));
-        payload = {
-          backgroundURLs: [...new Set(paths)].map(
-            (path) => `${images}w1280${path}`,
-          ),
-        };
-      } else if (episodeLookup) {
-        payload = {
-          episodes: list.map((item) => ({
-            season: item.season_number,
-            episode: item.episode_number,
-            title: item.name,
-            stillURL: item.still_path
-              ? `${images}w780${item.still_path}`
-              : null,
-          })),
-        };
       } else {
-        const results = list.flatMap((item) => {
-          const mediaType = type === "multi" ? item?.media_type : type;
-          if (!item || !["movie", "tv"].includes(mediaType)) return [];
-          return [
-            {
-              id: item.id,
-              mediaType,
-              title: item.title ?? item.name ?? "",
-              overview: item.overview ?? "",
-              releaseDate: item.release_date || item.first_air_date || null,
-              posterURL: item.poster_path
-                ? `${images}w500${item.poster_path}`
-                : null,
-              backgroundURL: item.backdrop_path
-                ? `${images}w1280${item.backdrop_path}`
-                : null,
-              url: `https://www.themoviedb.org/${mediaType}/${item.id}`,
-            },
+        const list =
+          data?.[
+            imageLookup ? "backdrops" : episodeLookup ? "episodes" : "results"
           ];
-        });
-        payload = { results };
+        if (!Array.isArray(list)) return error("Invalid TMDB response.", 502);
+        if (imageLookup) {
+          const paths = list
+            .map((item) => item?.file_path)
+            .filter((path) => typeof path === "string" && path.startsWith("/"));
+          payload = {
+            backgroundURLs: [...new Set(paths)].map(
+              (path) => `${images}w1280${path}`,
+            ),
+          };
+        } else if (episodeLookup) {
+          payload = {
+            episodes: list.flatMap((item) =>
+              Number.isInteger(item?.season_number) &&
+              Number.isInteger(item.episode_number)
+                ? [
+                    {
+                      season: item.season_number,
+                      episode: item.episode_number,
+                      title: typeof item.name === "string" ? item.name : "",
+                      stillURL: item.still_path
+                        ? `${images}w780${item.still_path}`
+                        : null,
+                    },
+                  ]
+                : [],
+            ),
+          };
+        } else {
+          const results = list.flatMap((item) => {
+            const mediaType = type === "multi" ? item?.media_type : type;
+            if (!item || !["movie", "tv"].includes(mediaType)) return [];
+            return [
+              {
+                id: item.id,
+                mediaType,
+                title: item.title ?? item.name ?? "",
+                overview: item.overview ?? "",
+                releaseDate: item.release_date || item.first_air_date || null,
+                posterURL: item.poster_path
+                  ? `${images}w500${item.poster_path}`
+                  : null,
+                backgroundURL: item.backdrop_path
+                  ? `${images}w1280${item.backdrop_path}`
+                  : null,
+                url: `https://www.themoviedb.org/${mediaType}/${item.id}`,
+              },
+            ];
+          });
+          payload = { results };
+        }
       }
       const response = Response.json(payload, {
         headers: { ...headers, "Cache-Control": "public, max-age=3600" },

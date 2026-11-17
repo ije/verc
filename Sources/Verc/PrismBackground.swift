@@ -17,10 +17,10 @@ private struct PrismSurface: NSViewRepresentable {
   var suspended: Bool
   var reduceMotion: Bool
 
-  func makeCoordinator() -> PrismRenderer? { PrismRenderer(device: MTLCreateSystemDefaultDevice()) }
+  func makeCoordinator() -> PrismRenderer? { PrismRenderer(device: PrismResources.device) }
 
   func makeNSView(context: Context) -> PrismMetalView {
-    let view = PrismMetalView(frame: .zero, device: context.coordinator?.device)
+    let view = PrismMetalView(frame: .zero, device: PrismResources.device)
     view.colorPixelFormat = .bgra8Unorm
     view.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
     view.autoResizeDrawable = false
@@ -45,12 +45,10 @@ private struct PrismSurface: NSViewRepresentable {
 private final class PrismMetalView: MTKView {
   private var tracking: NSTrackingArea?
   private var pointerMonitor: Any?
-  private var occlusionObserver: NSObjectProtocol?
+  private var observers: [NSObjectProtocol] = []
   var suspended = false
 
   private var renderer: PrismRenderer? { delegate as? PrismRenderer }
-
-  override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
   override func setFrameSize(_ newSize: NSSize) {
     super.setFrameSize(newSize)
@@ -65,15 +63,14 @@ private final class PrismMetalView: MTKView {
   private func resizeDrawable() {
     let scale = min(window?.backingScaleFactor ?? 2, 2560 / max(bounds.width, bounds.height, 1))
     let size = CGSize(
-      width: max(1, (bounds.width * scale).rounded()),
-      height: max(1, (bounds.height * scale).rounded()))
+      width: max(1, (bounds.width * scale).rounded()), height: max(1, (bounds.height * scale).rounded()))
     if drawableSize != size { drawableSize = size }
     schedule()
   }
 
   func schedule() {
     let visible = window?.occlusionState.contains(.visible) ?? false
-    let running = renderer?.animating == true && visible && !suspended
+    let running = renderer?.animating == true && visible && !suspended && NSApp.isActive
     if running, let renderer {
       let rate = renderer.interactive ? 60 : 30
       if preferredFramesPerSecond != rate { preferredFramesPerSecond = rate }
@@ -100,20 +97,24 @@ private final class PrismMetalView: MTKView {
       }
       return event
     }
-    occlusionObserver = NotificationCenter.default.addObserver(
-      forName: NSWindow.didChangeOcclusionStateNotification,
-      object: window, queue: .main
-    ) { [weak self] _ in
-      MainActor.assumeIsolated { self?.schedule() }
+    observers = [
+      (NSWindow.didChangeOcclusionStateNotification, window),
+      (NSApplication.didBecomeActiveNotification, nil),
+      (NSApplication.didResignActiveNotification, nil),
+    ].map { name, object in
+      NotificationCenter.default.addObserver(forName: name, object: object, queue: .main) {
+        [weak self] _ in
+        MainActor.assumeIsolated { self?.schedule() }
+      }
     }
     resizeDrawable()
   }
 
   func teardown() {
     if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor) }
-    if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
+    for observer in observers { NotificationCenter.default.removeObserver(observer) }
     pointerMonitor = nil
-    occlusionObserver = nil
+    observers = []
   }
 
   override func updateTrackingAreas() {
@@ -140,6 +141,7 @@ private final class PrismMetalView: MTKView {
 
 // Shared buffers and textures must stay immutable after initialization.
 private final class PrismResources: @unchecked Sendable {
+  static let device = MTLCreateSystemDefaultDevice()
   static let shared = Task.detached(priority: .userInitiated) { try PrismResources(bundle: .main) }
 
   enum Blend { case replace, additive, premultiplied }
@@ -152,7 +154,7 @@ private final class PrismResources: @unchecked Sendable {
   let environment: any MTLTexture
 
   init(bundle: Bundle) throws {
-    guard let device = MTLCreateSystemDefaultDevice(), let queue = device.makeCommandQueue() else {
+    guard let device = Self.device, let queue = device.makeCommandQueue() else {
       throw CocoaError(.featureUnsupported)
     }
     self.queue = queue
@@ -280,6 +282,7 @@ private final class PrismResources: @unchecked Sendable {
     var planes = (
       SIMD4<Float>.zero, SIMD4<Float>.zero, SIMD4<Float>.zero, SIMD4<Float>.zero, SIMD4<Float>.zero
     )
+    // Front corner UVs for dust, with the light z in the last lane.
     var prism = (SIMD4<Float>.zero, SIMD4<Float>.zero)
     var layout = SIMD4<UInt32>.zero
   }
@@ -326,7 +329,7 @@ private final class PrismResources: @unchecked Sendable {
   private var lightIndex = 0
   private var targets: Targets?
   private var uniforms = Uniforms()
-  private static let restingAim = Vec(0.97, 0.85)
+  private static let restingAim = Vec(0.022, 0.45)
   private var aim = restingAim, aimTarget = restingAim
   private var orbit = Vec.zero, orbitTarget = Vec.zero
   private var builtLight: (aim: Vec, wall: Vec)?
@@ -353,12 +356,7 @@ private final class PrismResources: @unchecked Sendable {
     super.init()
     let planes = PrismScene.planes
     uniforms.planes = (planes[0], planes[1], planes[2], planes[3], planes[4])
-    let corners = PrismScene.triangle.map { SIMD2<Float>($0) }
-    uniforms.prism = (
-      SIMD4(lowHalf: corners[0], highHalf: corners[1]),
-      SIMD4(
-        lowHalf: corners[2], highHalf: SIMD2(Float(PrismScene.frontZ), Float(PrismScene.lightZ)))
-    )
+    uniforms.prism.1.w = Float(PrismScene.lightZ)
     uniforms.layout = SIMD4(
       UInt32(Self.layout.whiteQuads), UInt32(Self.layout.slices), UInt32(Self.layout.samples),
       UInt32(Self.layout.internalQuads))
@@ -418,6 +416,16 @@ private final class PrismResources: @unchecked Sendable {
 
   func draw(in view: MTKView) {
     guard let resources else { return }
+    let size = SIMD2(Int(view.drawableSize.width), Int(view.drawableSize.height))
+    if targets?.size != size {
+      targets = makeTargets(size)
+      sceneDirty = true
+    }
+    // Pause until the next schedule() instead of presenting blank frames.
+    guard let targets else {
+      view.isPaused = true
+      return
+    }
     // Wait before taking a drawable, so a blocked frame does not hold one of the few drawables.
     inFlight.wait()
     guard let drawable = view.currentDrawable, let command = resources.queue.makeCommandBuffer()
@@ -426,33 +434,28 @@ private final class PrismResources: @unchecked Sendable {
       return
     }
     command.addCompletedHandler { [inFlight] _ in inFlight.signal() }
-    encode(command, resources, output: drawable.texture, now: CACurrentMediaTime())
+    encode(command, resources, targets, output: drawable.texture, now: CACurrentMediaTime())
     command.present(drawable)
     command.commit()
     (view as? PrismMetalView)?.schedule()
   }
 
   private func encode(
-    _ command: any MTLCommandBuffer, _ resources: PrismResources, output: any MTLTexture,
-    now: CFTimeInterval
+    _ command: any MTLCommandBuffer, _ resources: PrismResources, _ targets: Targets,
+    output: any MTLTexture, now: CFTimeInterval
   ) {
-    let size = SIMD2(output.width, output.height)
-    if targets?.size != size {
-      targets = makeTargets(size)
-      sceneDirty = true
-    }
-    guard let targets else { return }
     if started == nil { started = now }
     let aimed = ease(&aim, aimTarget, 0.12, snap: 1e-4)
     // Orbit steps below 3e-3 move the image less than a pixel, so stop there instead of rendering identical frames.
     let orbited = ease(&orbit, orbitTarget, 0.08, snap: 3e-3)
     let progress = revealProgress(at: now)
+    // Prism.metal makes dust motion repeat every 3600 seconds, so this wrap is seamless.
     let dustTime =
       reduceMotion
       ? 0 : Float((floor((now - started!) * 30) / 30).truncatingRemainder(dividingBy: 3600))
     uniforms.timing = SIMD4(dustTime, progress.opacity, progress.beam, 0)
     if sceneDirty || aimed || orbited || presentedBeam != progress.beam {
-      update(size)
+      update(targets.size)
       encodeScene(command, resources, targets)
       sceneDirty = false
       presentedBeam = progress.beam
@@ -474,6 +477,16 @@ private final class PrismResources: @unchecked Sendable {
     uniforms.camera = SIMD4(camera.position, Float(PrismScene.cameraDistance))
     uniforms.output = SIMD4(
       Float(size.x), Float(size.y), Float(camera.wall.x), Float(camera.wall.y))
+    let uv = PrismScene.triangle.map { corner -> SIMD2<Float> in
+      let clip =
+        camera.viewProjection
+        * SIMD4(lowHalf: SIMD2<Float>(corner), highHalf: SIMD2(Float(PrismScene.frontZ), 1))
+      return SIMD2(clip.x, -clip.y) / max(clip.w, 1e-5) * 0.5 + 0.5
+    }
+    uniforms.prism = (
+      SIMD4(lowHalf: uv[0], highHalf: uv[1]),
+      SIMD4(lowHalf: uv[2], highHalf: SIMD2(0, uniforms.prism.1.w))
+    )
     let wall = camera.wall * min(2.5, max(1, 1 / aspect))
     if builtLight?.aim != aim || builtLight?.wall != wall {
       let lamp = PrismScene.Lamp(arc: aim.x, target: aim.y)

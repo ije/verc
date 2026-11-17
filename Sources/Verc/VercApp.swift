@@ -60,7 +60,6 @@ struct VercApp: App {
   let favorites = FavoritePages()
 
   func applicationDidFinishLaunching(_ notification: Notification) {
-    NSApp.setActivationPolicy(.regular)
     (AppIcon(rawValue: UserDefaults.standard.string(forKey: "appIcon") ?? "") ?? .glass).apply()
     NSApp.activate(ignoringOtherApps: true)
     player.openLibrary = { [weak self] urls in
@@ -99,8 +98,8 @@ struct VercApp: App {
     guard let engine = player.engine else { return .terminateNow }
     player.stop()
     Task {
-      // A quit during an import stops the file moves, and the next launch moves the files back.
-      await favorites.flush()
+      // Do not wait for an import. The quit stops its file moves, and the next launch moves the files back.
+      if !favorites.saving { await favorites.flush() }
       await withCheckedContinuation { done in engine.shutdown { done.resume() } }
       NSApp.reply(toApplicationShouldTerminate: true)
     }
@@ -110,6 +109,10 @@ struct VercApp: App {
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     !player.isPictureInPicture
   }
+}
+
+extension UTType {
+  static let vercLibrary = UTType(exportedAs: "me.jex.verc.library", conformingTo: .package)
 }
 
 struct PlayerCommands: Commands {
@@ -138,9 +141,7 @@ struct PlayerCommands: Commands {
         panel.title = "Create Library"
         panel.prompt = "Create"
         panel.nameFieldStringValue = "Verc.verclibrary"
-        panel.allowedContentTypes = [
-          UTType(exportedAs: "me.jex.verc.library", conformingTo: .package)
-        ]
+        panel.allowedContentTypes = [.vercLibrary]
         panel.directoryURL =
           favorites.url?.deletingLastPathComponent()
           ?? Library.defaultURL.deletingLastPathComponent()
@@ -154,9 +155,7 @@ struct PlayerCommands: Commands {
       Button("Open Library…") {
         let panel = NSOpenPanel()
         panel.title = "Open Library"
-        panel.allowedContentTypes = [
-          UTType(exportedAs: "me.jex.verc.library", conformingTo: .package)
-        ]
+        panel.allowedContentTypes = [.vercLibrary]
         panel.directoryURL =
           favorites.url?.deletingLastPathComponent()
           ?? Library.defaultURL.deletingLastPathComponent()
@@ -193,7 +192,7 @@ struct PlayerCommands: Commands {
       // Menu key equivalents run before text fields get the key, so turn off single keys while one is shown.
       let typing =
         player.showURL || player.showIconPicker || favorites.draft != nil
-        || favorites.showAllMedia && player.current == nil
+        || player.pendingPlayback != nil || favorites.showAllMedia && player.current == nil
       Button(player.playLabel) { player.togglePlay() }
         .keyboardShortcut(typing ? nil : KeyboardShortcut(.space, modifiers: []))
       Button("Stop") { player.stop() }.keyboardShortcut(".").disabled(player.current == nil)
@@ -222,7 +221,7 @@ struct PlayerCommands: Commands {
     CommandGroup(after: .toolbar) {
       let browsing =
         favorites.ready && player.current == nil && !player.showURL && !player.showInfo
-        && !player.showIconPicker && favorites.draft == nil
+        && !player.showIconPicker && favorites.draft == nil && player.pendingPlayback == nil
         && favorites.pendingDeletion == nil && !favorites.showAllMedia
       Button("Previous Preview") { favorites.movePreview(by: -1) }
         .keyboardShortcut(browsing ? KeyboardShortcut(.leftArrow, modifiers: []) : nil)

@@ -645,7 +645,7 @@ private struct FavoriteMediaCard: View {
       let loaded =
         artwork == nil
         ? await engine.preview(of: item.url)
-        : MediaPreview(duration: await engine.duration(of: item.url))
+        : MediaPreview(duration: await engine.details(of: item.url).duration)
       if !Task.isCancelled { preview = loaded }
     }
   }

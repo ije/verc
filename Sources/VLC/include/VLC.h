@@ -25,6 +25,7 @@ typedef struct VCPreview {
 } VCPreview;
 
 VCEngine *vc_create(const char *directory, char *error, int capacity);
+void vc_abort(VCEngine *engine);
 void vc_destroy(VCEngine *engine);
 const char *vc_version(VCEngine *engine);
 void vc_drawable(VCEngine *engine, void *view);

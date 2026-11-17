@@ -6,21 +6,19 @@ enum Library {
   static let defaultURL = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask)[0]
     .appendingPathComponent("Verc.verclibrary", isDirectory: true)
   static var url: URL {
-    if let path = UserDefaults.standard.string(forKey: "libraryPath") {
-      return URL(fileURLWithPath: path, isDirectory: true)
-    }
-    let legacy = defaultURL.deletingLastPathComponent().appendingPathComponent(
-      "Verc Library.verclibrary", isDirectory: true)
-    return !FileManager.default.fileExists(atPath: defaultURL.path)
-      && FileManager.default.fileExists(atPath: legacy.path) ? legacy : defaultURL
+    UserDefaults.standard.string(forKey: "libraryPath").map {
+      URL(fileURLWithPath: $0, isDirectory: true)
+    } ?? defaultURL
   }
 
   static func filename(_ title: String) -> String {
-    let name = title.components(
+    var name = title.components(
       separatedBy: CharacterSet.controlCharacters.union(CharacterSet(charactersIn: "/:"))
     )
     .joined(separator: "-").trimmingCharacters(in: CharacterSet(charactersIn: " .\t\n"))
-    return name.isEmpty ? "Untitled" : String(name.prefix(120))
+    // APFS limits a name to 255 UTF-8 bytes. Leave room for a " (2)" suffix.
+    while name.utf8.count > 240 { name.removeLast() }
+    return name.isEmpty ? "Untitled" : name
   }
 
   // A folder name from the database becomes a path in the library, so it must be one plain path component.
@@ -35,14 +33,6 @@ enum Library {
         [digits[Int($0 >> 4)], digits[Int($0 & 15)]]
       }, as: UTF8.self)
     return url.pathExtension.isEmpty ? hash : hash + "." + url.pathExtension.lowercased()
-  }
-
-  // Older imports left symlinks. Use the library file, so progress and subtitles match.
-  static func resolve(_ url: URL) -> URL {
-    guard url.isFileURL else { return url }
-    let resolved = url.resolvingSymlinksInPath()
-    return resolved.pathComponents.dropLast().contains { $0.lowercased().hasSuffix(".verclibrary") }
-      ? resolved : url
   }
 }
 
@@ -123,14 +113,10 @@ actor LibraryStore {
   }
 
   func load(create: Bool = false) throws -> [FavoritePage] {
-    let files = FileManager.default
-    if create {
-      try files.createDirectory(
-        at: root.deletingLastPathComponent(), withIntermediateDirectories: true)
-      try files.createDirectory(at: root, withIntermediateDirectories: false)
-    } else {
+    // database() makes the package. A created library that already exists opens as it is.
+    if !create {
       guard try root.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true,
-        files.fileExists(atPath: root.appendingPathComponent("Library.vercdb").path)
+        FileManager.default.fileExists(atPath: root.appendingPathComponent("Library.vercdb").path)
       else {
         throw CocoaError(.fileReadCorruptFile)
       }
@@ -341,9 +327,6 @@ actor LibraryStore {
   {
     let files = FileManager.default
     if files.fileExists(atPath: destination.path) {
-      if !copied, (try? files.destinationOfSymbolicLink(atPath: source.path)) == destination.path {
-        try files.removeItem(at: source)
-      }
       if copied && interrupted {
         try files.removeItem(at: destination)
       } else if !files.fileExists(atPath: source.path) {
@@ -376,10 +359,9 @@ actor LibraryStore {
     var cached: [String: String] = [:]
     for url in page.artworkURLs {
       let name = Library.artworkName(url)
-      let candidates = [
-        name, page.cachedArtwork?[url.absoluteString], (name as NSString).deletingPathExtension,
-      ].compactMap { $0 }
-      if let existing = candidates.first(where: files.contains) {
+      if let existing = [name, page.cachedArtwork?[url.absoluteString]].compactMap({ $0 }).first(
+        where: files.contains)
+      {
         cached[url.absoluteString] = existing
       }
     }

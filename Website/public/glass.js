@@ -25,9 +25,13 @@ const observer = new ResizeObserver((entries) => {
     canvas.width = width;
     canvas.height = height;
     const map = context.createImageData(width, height),
-      rim = Math.min(12, radius);
+      rim = Math.min(12, radius),
+      corner = Math.ceil(radius) || 1;
+    new Uint32Array(map.data.buffer).fill(0xff808080);
     for (let y = 0; y < height; y++) {
+      const full = y < rim || y + 1 > height - rim;
       for (let x = 0; x < width; x++) {
+        if (!full && x === corner) x = Math.max(x, width - corner);
         const dx =
           x + 0.5 - Math.max(radius, Math.min(width - radius, x + 0.5));
         const dy =
@@ -41,8 +45,6 @@ const observer = new ResizeObserver((entries) => {
         const offset = (y * width + x) * 4;
         map.data[offset] = Math.round(128 - dx * bend * 127);
         map.data[offset + 1] = Math.round(128 - dy * bend * 127);
-        map.data[offset + 2] = 128;
-        map.data[offset + 3] = 255;
       }
     }
     context.putImageData(map, 0, 0);

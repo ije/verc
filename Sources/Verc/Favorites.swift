@@ -85,11 +85,15 @@ struct FavoritePage: Identifiable, Sendable {
       let media = try urls.flatMap { url in
         guard url.pathExtension.lowercased() != "verclibrary" else { return [URL]() }
         if try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true {
-          return try FileManager.default.contentsOfDirectory(
-            at: url, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles])
+          guard
+            let files = FileManager.default.enumerator(
+              at: url, includingPropertiesForKeys: [.isRegularFileKey],
+              options: [.skipsHiddenFiles, .skipsPackageDescendants])
+          else { throw CocoaError(.fileReadNoSuchFile) }
+          return files.compactMap { $0 as? URL }
         }
         return [url]
-      }.map(Library.resolve).filter {
+      }.map { $0.resolvingSymlinksInPath() }.filter {
         seen.insert($0.standardizedFileURL).inserted && MediaItem.isMediaFile($0, images: true)
       }.sorted {
         $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
@@ -162,6 +166,8 @@ struct FavoritePage: Identifiable, Sendable {
   private var persistence: Task<Void, Never>?
   private var artworkTask: Task<Void, Never>?
   private var applying = false
+  // TMDB lookups that failed in this session. Without this, every save requests them again.
+  private var failedLookups: Set<String> = []
   private var queued = false
   private(set) var url: URL?
   private(set) var opening = false
@@ -273,15 +279,18 @@ struct FavoritePage: Identifiable, Sendable {
       for var page in snapshot {
         guard !Task.isCancelled else { return }
         if let info = page.info, info.backgroundURLs == nil,
-          let response = try? await TMDB.load(.init(type: info.mediaType.rawValue, id: info.id))
+          !failedLookups.contains("\(info.url)")
         {
-          page.info?.backgroundURLs = response.backgroundURLs
+          if let response = try? await TMDB.load(.init(type: info.mediaType.rawValue, id: info.id)) {
+            page.info?.backgroundURLs = response.backgroundURLs
+          } else if !Task.isCancelled { failedLookups.insert("\(info.url)") }
         }
-        if let info = page.info, info.credits == nil,
-          let response = try? await TMDB.load(
+        if let info = page.info, info.credits == nil, !failedLookups.contains("credits \(info.url)") {
+          if let response = try? await TMDB.load(
             .init(type: info.mediaType.rawValue, id: info.id, credits: true))
-        {
-          page.info?.credits = response.credits
+          {
+            page.info?.credits = response.credits
+          } else if !Task.isCancelled { failedLookups.insert("credits \(info.url)") }
         }
         let cached = await store.cacheArtwork(page)
         guard !Task.isCancelled else { return }

@@ -72,5 +72,3 @@ for scale in 1...2 {
 try NSBitmapImageRep.representationOfImageReps(
   in: representations, using: .tiff, properties: [.compressionMethod: 5])!
   .write(to: directory.appendingPathComponent("background.tiff"))
-try representations[1].representation(using: .png, properties: [:])!
-  .write(to: directory.appendingPathComponent("background.png"))

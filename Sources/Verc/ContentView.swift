@@ -304,16 +304,13 @@ struct ContentView: View {
         isPresented: Binding<Bool>(
           get: { player.error != nil || favorites.error != nil },
           set: {
+            // Clear only the shown error, so the alert shows the other one next.
             if !$0 {
-              player.error = nil
-              favorites.error = nil
+              if player.error != nil { player.error = nil } else { favorites.error = nil }
             }
           })
       ) {
-        Button("OK") {
-          player.error = nil
-          favorites.error = nil
-        }
+        Button("OK", role: .cancel) {}
       } message: {
         Text(player.error ?? favorites.error ?? "")
       }

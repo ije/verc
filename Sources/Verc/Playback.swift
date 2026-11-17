@@ -395,7 +395,7 @@ final class VLC: @unchecked Sendable {
           VCSubtitleLayout(
             width: width, height: height, bottomInset: bottomInset, fontSize: fontSize), font)
       case .crop(let geometry):
-        if let geometry { vc_crop(handle, geometry) } else { vc_crop(handle, nil) }
+        vc_crop(handle, geometry)
       case .stop:
         vc_stop(handle)
         timer?.schedule(deadline: .distantFuture)
@@ -521,10 +521,6 @@ final class VLC: @unchecked Sendable {
     }
   }
 
-  func duration(of url: URL) async -> Double? {
-    await details(of: url).duration
-  }
-
   func details(of url: URL) async -> MediaDetails {
     if let cached = mediaDetails.object(forKey: url as NSURL) { return cached }
     return await metadata(MediaDetails()) { [self] handle in
@@ -634,6 +630,7 @@ final class VLC: @unchecked Sendable {
       if !closed.exchange(true, ordering: .relaxed) {
         timer?.cancel()
         timer = nil
+        if let handle { vc_abort(handle) }
       }
       metadataQueue.async { [self] in
         previewQueue.async { [self] in
@@ -1102,7 +1099,7 @@ final class VLC: @unchecked Sendable {
         var applied = ContinuousClock.now
         for index in readable {
           guard !Task.isCancelled else { return }
-          durations[index] = await engine.duration(of: items[index].url)
+          durations[index] = await engine.details(of: items[index].url).duration
           guard !Task.isCancelled, let self else { return }
           // Each playlist change redraws the player and rebuilds the menus, so apply durations in batches.
           guard index == readable.last || ContinuousClock.now - applied >= .milliseconds(500) else {
@@ -1140,7 +1137,7 @@ final class VLC: @unchecked Sendable {
           let files = try FileManager.default.contentsOfDirectory(
             at: url, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles]
           )
-          .map(Library.resolve).filter { MediaItem.isMediaFile($0) }
+          .map { $0.resolvingSymlinksInPath() }.filter { MediaItem.isMediaFile($0) }
           .sorted {
             $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
           }
@@ -1164,7 +1161,7 @@ final class VLC: @unchecked Sendable {
         media += nested.media
         failure = nested.failure ?? failure
       } else {
-        media.append(Library.resolve(url))
+        media.append(url.isFileURL ? url.resolvingSymlinksInPath() : url)
       }
     }
     let videos = media.filter { MediaItem(url: $0).isVideo }

@@ -56,8 +56,11 @@ enum PrismScene {
   }
 
   struct Path {
-    var points: [Vec]
-    var edges: [Int]
+    // Holds maxBounces + 2 points.
+    var points: InlineArray<5, Vec>
+    var count: Int
+    // Packs the hit edges in base 4, so paths with the same key cross the same edges.
+    var edges: Int
     var origin: Vec
     var direction: Vec
     var transmission: Double
@@ -111,22 +114,20 @@ enum PrismScene {
       var inside = refract(direction, entry.normal, 1 / ior)
     else { return nil }
     var position = origin + direction * entry.t
-    // Reserve the longest path. Array growth here costs about 20% of each light rebuild.
-    var points = [Vec]()
-    var edges = [Int]()
-    points.reserveCapacity(maxBounces + 2)
-    edges.reserveCapacity(maxBounces + 2)
-    points.append(position)
-    edges.append(entry.edge)
+    var points = InlineArray<5, Vec>(repeating: position)
+    var count = 1
+    var edges = entry.edge + 1
     let entryTransmission = transmittance(direction, entry.normal, 1, ior)
     for _ in 0...maxBounces {
       guard let exit = intersect(position, inside, minimum: 1e-4) else { return nil }
       position += inside * exit.t
-      points.append(position)
-      edges.append(exit.edge)
+      points[count] = position
+      count += 1
+      edges = edges * 4 + exit.edge + 1
       if let transmitted = refract(inside, -exit.normal, ior) {
         return Path(
-          points: points, edges: edges, origin: position, direction: simd_normalize(transmitted),
+          points: points, count: count, edges: edges, origin: position,
+          direction: simd_normalize(transmitted),
           transmission: entryTransmission * transmittance(inside, -exit.normal, ior, 1),
           entryTransmission: entryTransmission)
       }
@@ -291,7 +292,7 @@ enum PrismScene {
         }
         let intensity = internalScale * (lower.entryTransmission + upper.entryTransmission) / 2
         for segment in 0..<internalSegments {
-          if segment + 1 < lower.points.count {
+          if segment + 1 < lower.count {
             quad(
               lower.points[segment], upper.points[segment], lower.points[segment + 1],
               upper.points[segment + 1],

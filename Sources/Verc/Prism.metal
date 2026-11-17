@@ -423,9 +423,6 @@ struct DustVertex {
   float2 lightUv [[flat]];
   float sparkle [[flat]];
   float softness [[flat]];
-  float2 prismA [[flat]];
-  float2 prismB [[flat]];
-  float2 prismC [[flat]];
   float opacity [[flat]];
 };
 
@@ -438,11 +435,9 @@ float hashU32(uint value) {
   return float(value & 0x00ffffffu) / 16777216.0;
 }
 
-float2 projectUv(float3 point, constant Scene &s) {
-  float4 clip = s.viewProjection * float4(point, 1);
-  float2 ndc = clip.xy / max(clip.w, 0.00001);
-  return float2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
-}
+// Swift wraps the dust time at this period, so every dust cycle and wave must repeat within it.
+constant float DUST_PERIOD = 3600.0;
+float dustFrequency(float frequency) { return round(frequency * DUST_PERIOD / (2.0 * PI)) * 2.0 * PI / DUST_PERIOD; }
 
 float2 dustAppearance(float kind, float size) {
   if (kind < 0.82) return float2(mix(1.05, 1.75, size * size), 0.04);
@@ -456,10 +451,11 @@ vertex DustVertex dustVertex(uint vertexId [[vertex_id]], uint instance [[instan
   const float TAU = 6.28318530718;
   float time = s.timing.x;
   float id = float(instance) + 1.0;
-  float lifeDuration = mix(1.0, 7.0, hash11(id * 19.127 + 71.0));
+  float cycles = round(DUST_PERIOD / mix(1.0, 7.0, hash11(id * 19.127 + 71.0)));
+  float lifeDuration = DUST_PERIOD / cycles;
   float lifeClock = time + hash11(id * 23.417 + 83.0) * lifeDuration;
   float lifePhase = fract(lifeClock / lifeDuration);
-  uint key = (instance + 1u) ^ (uint(floor(lifeClock / lifeDuration)) * 0x9e3779b9u);
+  uint key = (instance + 1u) ^ ((uint(floor(lifeClock / lifeDuration)) % uint(cycles)) * 0x9e3779b9u);
   float seedX = hashU32(key ^ 0xa511e9b3u), seedY = hashU32(key ^ 0x63d83595u);
   float seedZ = hashU32(key ^ 0x9e3779b9u), seedDepth = hashU32(key ^ 0xc2b2ae35u);
   float seedSize = hash11(id * 7.731 + 31.0), seedClass = hash11(id * 9.173 + 37.0);
@@ -469,9 +465,9 @@ vertex DustVertex dustVertex(uint vertexId [[vertex_id]], uint instance [[instan
   float lightZ = s.prism[1].w;
   float3 world = float3((float2(seedX, seedY) * 2.0 - 1.0) * s.output.zw, lightZ + (seedZ + seedDepth - 1.0) * 0.14);
   world.xy *= clamp((s.camera.w - world.z) / max(s.camera.w, 0.001), 0.08, 1.0);
-  world += float3(sin(time * mix(0.09, 0.17, seedY) + seedZ * TAU) * mix(0.008, 0.035, seedSize),
-          sin(time * mix(0.07, 0.14, seedZ) + seedX * TAU) * mix(0.01, 0.04, seedY),
-          sin(time * mix(0.05, 0.1, seedX) + seedY * TAU) * mix(0.006, 0.025, seedZ));
+  world += float3(sin(time * dustFrequency(mix(0.09, 0.17, seedY)) + seedZ * TAU) * mix(0.008, 0.035, seedSize),
+          sin(time * dustFrequency(mix(0.07, 0.14, seedZ)) + seedX * TAU) * mix(0.01, 0.04, seedY),
+          sin(time * dustFrequency(mix(0.05, 0.1, seedX)) + seedY * TAU) * mix(0.006, 0.025, seedZ));
 
   float4 projected = s.viewProjection * float4(world, 1);
   float2 ndc = projected.xy / max(projected.w, 0.00001);
@@ -491,7 +487,7 @@ vertex DustVertex dustVertex(uint vertexId [[vertex_id]], uint instance [[instan
 
   float opacityBySize = min(1.0, pow(1.5 / max(appearance.x, 1.5), 0.9));
   float energy = 0.3 + 1.1 * pow(seedEnergy, 3.0);
-  float twinkle = 1.0 + mix(0.015, 0.06, appearance.y) * sin(time * mix(0.12, 0.28, seedShape) + seedAngle * TAU);
+  float twinkle = 1.0 + mix(0.015, 0.06, appearance.y) * sin(time * dustFrequency(mix(0.12, 0.28, seedShape)) + seedAngle * TAU);
   float fade = mix(0.14, 0.24, seedShape);
   float lifecycle = smoothstep(0.0, fade, lifePhase) * (1.0 - smoothstep(1.0 - fade, 1.0, lifePhase));
 
@@ -501,9 +497,6 @@ vertex DustVertex dustVertex(uint vertexId [[vertex_id]], uint instance [[instan
   out.lightUv = lightUv;
   out.sparkle = opacityBySize * energy * twinkle;
   out.softness = appearance.y;
-  out.prismA = projectUv(float3(s.prism[0].xy, s.prism[1].z), s);
-  out.prismB = projectUv(float3(s.prism[0].zw, s.prism[1].z), s);
-  out.prismC = projectUv(float3(s.prism[1].xy, s.prism[1].z), s);
   out.opacity = lifecycle;
   return out;
 }
@@ -518,7 +511,8 @@ fragment float4 dustFragment(DustVertex in [[stage_in]], constant Scene &s [[buf
   float radiusSquared = dot(in.pointCoord, in.pointCoord);
   if (radiusSquared > 1.0 || s.timing.y <= 0) discard_fragment();
   float2 uv = in.position.xy / max(s.output.xy, float2(1));
-  float a = edgeSide(in.prismA, in.prismB, uv), b = edgeSide(in.prismB, in.prismC, uv), c = edgeSide(in.prismC, in.prismA, uv);
+  float a = edgeSide(s.prism[0].xy, s.prism[0].zw, uv), b = edgeSide(s.prism[0].zw, s.prism[1].xy, uv);
+  float c = edgeSide(s.prism[1].xy, s.prism[0].xy, uv);
   if (!((a < 0 || b < 0 || c < 0) && (a > 0 || b > 0 || c > 0))) discard_fragment();
 
   float3 hue = max(colorLight.sample(linearClamp, in.lightUv).rgb, 0.0);

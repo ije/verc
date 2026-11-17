@@ -100,7 +100,7 @@ struct VCEngine {
   void *subtitleState;
   void (*subtitleRelease)(void *);
   void (*subtitleLayout)(void *, VCSubtitleLayout, const char *);
-  atomic_bool failed, playable;
+  atomic_bool failed, playable, closing;
 #define DECLARE(result, name, parameters) result(*name) parameters;
   VLC_FUNCTIONS(DECLARE)
 #undef DECLARE
@@ -207,6 +207,18 @@ VCEngine *vc_create(const char *directory, char *error, int capacity) {
   return engine;
 }
 
+// Stops the waits of parse and preview work, so shutdown does not wait seconds
+// for them.
+void vc_abort(VCEngine *e) { atomic_store(&e->closing, true); }
+
+static bool wait_signal(VCEngine *e, dispatch_semaphore_t signal, int seconds) {
+  for (int step = 0; step < seconds * 20 && !atomic_load(&e->closing); step++)
+    if (dispatch_semaphore_wait(
+            signal, dispatch_time(DISPATCH_TIME_NOW, 50 * NSEC_PER_MSEC)) == 0)
+      return true;
+  return false;
+}
+
 void vc_destroy(VCEngine *e) {
   e->media_player_stop(e->player);
   e->media_player_release(e->player);
@@ -254,8 +266,14 @@ int vc_open(VCEngine *e, const char *uri, double start,
   atomic_store(&e->failed, false);
   atomic_store(&e->playable, false);
   void *media = e->media_new_location(e->instance, uri);
-  if (!media)
+  if (!media) {
+    // Snapshots of the new media ID must not read the previous media.
+    e->media_player_set_media(e->player, NULL);
+    if (e->media)
+      e->media_release(e->media);
+    e->media = NULL;
     return -1;
+  }
   if (start > 0 && isfinite(start))
     start_at(e, media, start);
   for (int i = 0; i < count; i++)
@@ -287,8 +305,7 @@ static bool parse(VCEngine *e, void *media, int flags) {
   if (e->event_attach(events, VC_EVENT_PARSED, parsed_media, signal) == 0) {
     parsed =
         e->media_parse_with_options(media, flags, 3000) == 0 &&
-        dispatch_semaphore_wait(
-            signal, dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC)) == 0 &&
+        wait_signal(e, signal, 3) &&
         e->media_get_parsed_status(media) == 4;
     e->media_parse_stop(media);
     e->event_detach(events, VC_EVENT_PARSED, parsed_media, signal);
@@ -304,13 +321,15 @@ VCMediaInfo vc_read_media_info(VCEngine *e, const char *uri) {
     return info;
   if (parse(e, media, 0)) {
     info.duration = e->media_get_duration(media);
-    info.hasVideo = video_track(e, media).width != 0;
     VCMediaTrack **tracks = NULL;
     unsigned count = e->media_tracks_get(media, &tracks);
     info.subtitleCount = 0;
     for (unsigned i = 0; i < count; i++) {
       if (tracks[i]->type == VC_TRACK_TEXT)
         info.subtitleCount++;
+      else if (tracks[i]->type == VC_TRACK_VIDEO && tracks[i]->video &&
+               tracks[i]->video->width && tracks[i]->video->height)
+        info.hasVideo = 1;
     }
     if (count)
       e->media_tracks_release(tracks, count);
@@ -386,9 +405,7 @@ VCPreview vc_read_preview(VCEngine *e, const char *uri, int video) {
     e->video_set_format(player, "RV32", preview.width, preview.height,
                         preview.pitch);
     bool decoded = e->media_player_play(player) == 0 &&
-                   dispatch_semaphore_wait(
-                       buffer.signal,
-                       dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC)) == 0;
+                   wait_signal(e, buffer.signal, 5);
     // Stop joins the video callbacks before their buffer and synchronization
     // objects are released.
     e->media_player_stop(player);
