@@ -114,7 +114,7 @@ jobs:
           archive="Verc-${GITHUB_REF_NAME#v}-arm64.dmg"
           shasum -a 256 "$archive" vlc-3.0.24.tar.xz > SHA256SUMS
 
-      - name: Create draft release
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -126,9 +126,10 @@ jobs:
               exit 1
             fi
             gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
+            gh release edit "$GITHUB_REF_NAME" --draft=false --notes "" --latest
           else
             gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
-              --verify-tag --draft --title "Verc $GITHUB_REF_NAME" --generate-notes
+              --verify-tag --title "Verc $GITHUB_REF_NAME" --notes "" --latest
           fi
 
       - name: Remove Apple credentials
