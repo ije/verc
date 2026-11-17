@@ -15,14 +15,19 @@ Verc is a media player for Apple silicon and macOS 26+. It uses Swift 6, SwiftUI
 - `Sources/Verc/VercApp.swift`: app lifecycle, windows, menus, and keyboard shortcuts.
 - `Sources/Verc/Playback.swift`: media types, playlists, `PlayerModel`, and the VLC queue wrapper.
 - `Sources/Verc/ContentView.swift`: player interface and the shared video surface.
+- `Sources/Verc/Sliders.swift`, `PlayerContextMenu.swift`, and `FramePreview.swift`: seek, volume, and subtitle sliders, the player context menu, and the snapshot preview panel.
+- `Sources/Verc/TMDB.swift`: filename parsing and the client for the Worker's `POST /tmdb` endpoint.
 - `Sources/Verc/Favorites.swift`, `Library.swift`, and `LibraryDatabase.swift`: library items, the `FavoritePages` store, file import, and the SQLite database.
 - `Sources/Verc/StartPage.swift`: start page, library, and item editor views.
+- `Sources/Verc/AppIcon.swift`, `DropIcon.swift`, `FavoriteDots.swift`, and `LiquidPlayIcon.swift`: alternate app icons and small decorative views.
 - `Sources/Verc/PictureInPicture.swift` and `SubtitleSurface.swift`: floating window and subtitle layout.
 - `Sources/Verc/PrismBackground.swift`, `PrismScene.swift`, and `Prism.metal`: Metal renderer, scene geometry, and shaders.
-- `Sources/VLC/`: C bridge and subtitle plugin. Public headers are in `include/`.
+- `Sources/VLC/`: C bridge, subtitle plugin, and snapshot plugin. Public headers are in `include/`.
 - `Resources/Info.plist`: app metadata and file extensions that `MediaItem` reads.
 - `scripts/build.sh` and `scripts/vlc-plugins.json`: app bundle assembly and VLC plugin selection.
-- `Website/`: Cloudflare Worker for TMDB search and episode data.
+- `scripts/dmg.sh` and `scripts/dmg-background.swift`: DMG packaging for a built `dist/Verc.app`.
+- `.github/workflows/release.yml`: on a `v*.*.*` tag, builds, signs, notarizes, and uploads a draft GitHub release.
+- `Website/`: Cloudflare Worker for TMDB search and episode data, and the static site in `public/`.
 
 ## Code constraints
 
@@ -68,11 +73,16 @@ For documentation-only changes, check the diff and referenced paths. No app buil
 - `index.ts`: the `POST /tmdb` endpoint, request validation, TMDB requests, and response cache.
 - `cloudflare.config.ts`: Worker name, entrypoint, compatibility date, and the `verc.download` custom domain. The Cache API does not work on `workers.dev`.
 - `package.json`: commands that use the `cf` CLI. `cf` builds with the `wrangler` dependency.
+- `wrangler.config.ts`: serves `public/` as static assets.
+- `public/`: static site. `scene.js`, `prism.js`, and `prism.wgsl` are a WebGPU port of the Prism renderer.
 - `index.test.ts`: Worker tests using `bun:test`.
+- `prism.test.ts` and `fixtures/prism.json`: check that `scene.js` matches `PrismScene.swift`. Update the fixtures when the Swift optics change.
 - `.env.example`: local environment variables. The Worker uses `TMDB_API_READ_ACCESS_TOKEN` for authentication.
 
-- Use four-space indentation and the current TypeScript style.
+- Use four-space indentation in TypeScript. In `public/`, keep the indentation of each file.
 - Keep response fields compatible with `Sources/Verc/TMDB.swift`.
+- Keep `public/scene.js` in sync with `PrismScene.swift`, and `public/prism.wgsl` with `Prism.metal`.
+- Keep `public/NOTICE.txt` and its license files current when you add fonts, third-party code, or TMDB content.
 - Keep TMDB credentials in the Worker environment. Do not include secrets in source files, responses, or logs.
 - Preserve request validation, the 4096-byte body limit, CORS headers, and the eight-second timeout for TMDB requests.
 - Cache successful responses for one hour. Keep cache keys separate for each search or episode request.
