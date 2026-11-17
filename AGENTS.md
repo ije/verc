@@ -44,7 +44,6 @@ Verc is a media player for Apple silicon and macOS 26+. It uses Swift 6, SwiftUI
 - Keep Swift GPU buffer layouts identical to their Metal structs.
 - Reuse GPU resources. Preserve animation suspension for hidden or inactive windows and support for Reduce Motion.
 - Preserve third-party notices. Refer to `NOTICE` for distribution requirements.
-- Do not commit generated files from `.build/` or `dist/`.
 - Do not update readme unless the user ask for.
 
 ## macOS build and checks
@@ -56,38 +55,14 @@ Use Xcode 26+ and the Metal Toolchain on an Apple silicon Mac. Install the toolc
 open dist/Verc.app
 ```
 
-The first build downloads VLC 3.0.24 and verifies its checksum. The script compiles the subtitle plugin and `Prism.metal` separately from SwiftPM.
-The script writes the VLC plugin cache after it signs the plugins. A later change to a plugin makes libVLC ignore the cache and open every plugin at launch.
-The app needs the bundled VLC runtime and resources. A plain `swift build` does not assemble the app bundle.
-
-For release or bundle changes, run `./scripts/build.sh`.
-The script checks ARM64 libraries, bundled dependencies, and the app signature. Release builds also enforce a 50 MiB limit.
-
-The macOS app has no automated test target. After app code changes, build the app and do manual checks for the affected behavior.
-For documentation-only changes, check the diff and referenced paths. No app build is necessary.
+For release or bundle changes, run `./scripts/build.sh`. 
 
 ## Website
 
-`Website/` uses TypeScript ES modules and Cloudflare Workers.
+`Website/` uses TypeScript ES modules and Cloudflare Workers. All code in `index.ts`, static assets are under `public/` dir. With two routes:
 
-- `index.ts`: the `POST /tmdb` endpoint, request validation, TMDB requests, and response cache.
-- `cloudflare.config.ts`: Worker name, entrypoint, compatibility date, and the `verc.download` custom domain. The Cache API does not work on `workers.dev`.
-- `package.json`: commands that use the `cf` CLI. `cf` builds with the `wrangler` dependency.
-- `wrangler.config.ts`: serves `public/` as static assets.
-- `public/`: static site. `scene.js`, `prism.js`, and `prism.wgsl` are a WebGPU port of the Prism renderer.
-- `index.test.ts`: Worker tests using `bun:test`.
-- `prism.test.ts` and `fixtures/prism.json`: check that `scene.js` matches `PrismScene.swift`. Update the fixtures when the Swift optics change.
-- `.env.example`: local environment variables. The Worker uses `TMDB_API_READ_ACCESS_TOKEN` for authentication.
-
-- Use four-space indentation in TypeScript. In `public/`, keep the indentation of each file.
-- Keep response fields compatible with `Sources/Verc/TMDB.swift`.
-- Keep `public/scene.js` in sync with `PrismScene.swift`, and `public/prism.wgsl` with `Prism.metal`.
-- Keep `public/NOTICE.txt` and its license files current when you add fonts, third-party code, or TMDB content.
-- Keep TMDB credentials in the Worker environment. Do not include secrets in source files, responses, or logs.
-- Preserve request validation, the 4096-byte body limit, CORS headers, and the eight-second timeout for TMDB requests.
-- Cache successful responses for one hour. Keep cache keys separate for each search or episode request.
-- Preserve the `Retry-After` header on TMDB rate-limit errors. Do not cache error responses.
-- Do not commit local `.env` files or generated `.cloudflare/` files.
+- `GET /`: Landing page. 
+- `POST /tmdb`: TMDB api.
 
 Run commands from `Website/`. The scripts require the `cf` CLI on `PATH`.
 
