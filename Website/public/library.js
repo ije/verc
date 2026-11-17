@@ -1,5 +1,3 @@
-import { triangle, view } from "./scene.js";
-
 const player = document.querySelector(".player"),
   gallery = player.querySelector(".gallery"),
   library = player.querySelector(".library");
@@ -9,20 +7,18 @@ const dots = [...player.querySelectorAll(".page-dot")],
 const tooltip = player.querySelector(".poster-tooltip"),
   title = player.querySelector(".window-title");
 const track = gallery.querySelector(".gallery-track"),
+  details = track.querySelector(".details"),
   credits = gallery.querySelector(".credits");
+const posters = library.querySelector(".posters"),
+  count = library.querySelector(".count"),
+  noResults = library.querySelector(".no-results");
 const windowUI = player.querySelector(".window-ui"),
   metrics = document.createElement("canvas").getContext("2d");
 let items = [],
   selected = 0;
-let drag = null,
-  dragged = false;
 
 function resize() {
-  const scale = Math.min(
-    1,
-    player.clientWidth / 640,
-    player.clientHeight / 360,
-  );
+  const scale = Math.min(1, player.clientWidth / 640, player.clientHeight / 360);
   const width = player.clientWidth / scale,
     height = player.clientHeight / scale;
   const cardWidth = Math.min(
@@ -32,20 +28,6 @@ function resize() {
   );
   const cardHeight = (cardWidth * 9) / 16,
     posterWidth = (cardHeight * 2) / 3;
-  const projection = view(width / height, [0, 0]).matrix,
-    corner = [...triangle[2], 0.315, 1];
-  const prismBottom =
-    (height *
-      (1 -
-        corner.reduce(
-          (sum, value, i) => sum + projection[i * 4 + 1] * value,
-          0,
-        ) /
-          corner.reduce(
-            (sum, value, i) => sum + projection[i * 4 + 3] * value,
-            0,
-          ))) /
-    2;
   windowUI.style.width = `${width}px`;
   windowUI.style.height = `${height}px`;
   windowUI.style.transform = `scale(${scale})`;
@@ -61,10 +43,9 @@ function resize() {
     ),
     "gallery-top": 64 + Math.max(0, (height - 160 - cardHeight - 32) / 2),
     "heading-size": cardHeight < 270 ? 24 : 32,
-    "hint-top": height - 60 - Math.max(0, height - prismBottom - 60) / 2,
   }))
     windowUI.style.setProperty(`--${key}`, `${value}px`);
-  for (const [index, people] of [...credits.querySelectorAll("dd")].entries()) {
+  for (const [index, people] of credits.querySelectorAll("dd").entries()) {
     const names = items[selected - 1]?.credits[index].names;
     if (!names) continue;
     const text = people.querySelector(".names"),
@@ -113,7 +94,7 @@ function select(index) {
     const link = gallery.querySelector(".tmdb-link");
     link.href = item.url;
     link.setAttribute("aria-label", `Open ${item.title} on TMDB`);
-    credits.replaceChildren();
+    const roles = document.createDocumentFragment();
     for (const credit of item.credits) {
       const role = document.createElement("dt"),
         people = document.createElement("dd"),
@@ -122,14 +103,14 @@ function select(index) {
       people.title = credit.names.join(", ");
       people.setAttribute("aria-label", people.title);
       names.className = "names";
-      names.textContent = credit.names.slice(0, 3).join(", ");
       people.append(names);
       const remaining = document.createElement("span");
       remaining.className = "remaining";
       people.append(remaining);
-      credits.append(role, people);
+      roles.append(role, people);
     }
-    track.querySelectorAll(".media-card").forEach((card) => card.remove());
+    credits.replaceChildren(roles);
+    const cards = document.createDocumentFragment();
     for (const media of item.media) {
       const card = document.createElement("a"),
         image = new Image(),
@@ -148,8 +129,9 @@ function select(index) {
       image.draggable = false;
       name.textContent = media.title;
       card.append(image, name);
-      track.append(card);
+      cards.append(card);
     }
+    track.replaceChildren(details, cards);
     track.setAttribute(
       "aria-label",
       `${item.title} ${item.mediaType === "tv" ? "episodes" : "gallery"}`,
@@ -164,7 +146,7 @@ try {
   const response = await fetch("/library.json");
   if (!response.ok) throw new Error("Unable to load the preview library.");
   items = await response.json();
-  library.querySelector(".count").textContent =
+  count.textContent =
     `${items.length} ${items.length === 1 ? "item" : "items"}`;
   for (const [index, item] of items.entries()) {
     if (dots.length < 5) {
@@ -193,7 +175,7 @@ try {
       select(index + 1);
       (dots[index + 1] ?? track).focus({ preventScroll: true });
     });
-    library.querySelector(".posters").append(card);
+    posters.append(card);
   }
   for (const [index, dot] of dots.entries()) {
     dot.addEventListener("click", () => select(index));
@@ -210,6 +192,37 @@ try {
       tooltip.hidden = true;
     });
   }
+  let lastScrollTime = -Infinity,
+    distance = 0,
+    scrolled = false;
+  player.querySelector(".dock").addEventListener(
+    "wheel",
+    (event) => {
+      if (event.ctrlKey || event.buttons) return;
+      event.preventDefault();
+      const delta =
+        Math.abs(event.deltaX) > Math.abs(event.deltaY)
+          ? event.deltaX
+          : event.deltaY;
+      if (event.timeStamp - lastScrollTime > 250 || delta * distance < 0) {
+        distance = 0;
+        scrolled = false;
+      }
+      lastScrollTime = event.timeStamp;
+      if (event.deltaMode === 0) {
+        if (scrolled) return;
+        distance += delta;
+        if (Math.abs(distance) < 24) return;
+        scrolled = true;
+      } else {
+        distance = delta;
+        if (!distance) return;
+      }
+      const index = selected + Math.sign(distance);
+      if (index >= 0 && index < dots.length) select(index);
+    },
+    { passive: false },
+  );
   toggle.addEventListener("click", () => {
     if (!library.hidden) {
       select(selected);
@@ -228,20 +241,20 @@ try {
     player.dispatchEvent(new Event("scenechange"));
     search.focus({ preventScroll: true });
   });
+  const cards = [...posters.children],
+    titles = items.map((item) => item.title.toLowerCase());
   search.addEventListener("input", () => {
-    let count = 0;
-    for (const [index, card] of [
-      ...library.querySelectorAll(".library-card"),
-    ].entries()) {
-      card.hidden = !items[index].title
-        .toLowerCase()
-        .includes(search.value.trim().toLowerCase());
-      if (!card.hidden) count++;
+    const query = search.value.trim().toLowerCase();
+    let matches = 0;
+    for (const [index, card] of cards.entries()) {
+      card.hidden = !titles[index].includes(query);
+      if (!card.hidden) matches++;
     }
-    library.querySelector(".count").textContent =
-      `${count} ${count === 1 ? "item" : "items"}`;
-    library.querySelector(".no-results").hidden = count !== 0;
+    count.textContent = `${matches} ${matches === 1 ? "item" : "items"}`;
+    noResults.hidden = matches !== 0;
   });
+  let drag = null,
+    dragged = false;
   track.addEventListener("pointerdown", (event) => {
     dragged = false;
     if (

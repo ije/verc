@@ -500,8 +500,13 @@ try {
   }
 
   function schedule() {
-    if (!frame && !stopped && visible && active && !document.hidden)
+    if (stopped || document.hidden || !visible || !active) {
+      cancelAnimationFrame(frame);
+      frame = 0;
+      lastFrame = 0;
+    } else if (!frame) {
       frame = requestAnimationFrame(render);
+    }
   }
   resizeObserver = new ResizeObserver(() => {
     resized = true;
@@ -510,34 +515,14 @@ try {
   resizeObserver.observe(canvas);
   intersectionObserver = new IntersectionObserver((entries) => {
     visible = entries[0].isIntersecting;
-    if (visible) {
-      lastFrame = 0;
-      schedule();
-    } else {
-      cancelAnimationFrame(frame);
-      frame = 0;
-    }
+    schedule();
   });
   intersectionObserver.observe(canvas);
   player.addEventListener("scenechange", () => {
     active = player.dataset.view === "prism";
-    if (active) {
-      lastFrame = 0;
-      schedule();
-    } else {
-      cancelAnimationFrame(frame);
-      frame = 0;
-    }
+    schedule();
   });
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) {
-      cancelAnimationFrame(frame);
-      frame = 0;
-    } else {
-      lastFrame = 0;
-      schedule();
-    }
-  });
+  document.addEventListener("visibilitychange", schedule);
   player.addEventListener("pointermove", (event) => {
     if (motion.matches || !active || event.pointerType !== "mouse") return;
     const bounds = canvas.getBoundingClientRect();

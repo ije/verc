@@ -41,9 +41,8 @@ input:focus-visible {
 }
 header {
   max-width: 1200px;
-  height: 80px;
+  height: 120px;
   padding: 0 48px;
-  margin-top: 28px;
   margin-inline: auto;
   display: flex;
   align-items: center;
@@ -80,13 +79,12 @@ header {
 }
 main {
   max-width: 1200px;
-  margin: auto;
+  margin-top: 80px;
+  margin-inline: auto;
   padding: 0 48px 120px;
 }
-.hero {
-  padding: 102px 0 58px;
-}
-h1 {
+h1,
+h2 {
   margin: 0;
   font-size: clamp(36px, 3.4vw, 48px);
   font-weight: 600;
@@ -94,18 +92,13 @@ h1 {
   letter-spacing: -0.03em;
 }
 h2 {
-  margin: 0;
-  font-size: clamp(36px, 3.4vw, 48px);
-  font-weight: 600;
-  line-height: 1.15;
-  letter-spacing: -0.03em;
   color: #888888;
 }
 .download {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  margin-top: 32px;
+  margin-top: 20px;
   padding: 13px 22px;
   min-height: 48px;
   border: 1px solid #ffffff29;
@@ -141,6 +134,7 @@ h2 {
 }
 .player {
   position: relative;
+  margin-top: 120px;
   width: 100%;
   aspect-ratio: 16 / 9;
   max-height: calc(100svh - 32px);
@@ -247,17 +241,6 @@ canvas {
 .info:hover {
   color: white;
   background-color: #ffffff1c;
-}
-.hint {
-  position: absolute;
-  top: var(--hint-top);
-  transform: translateY(-50%);
-  left: 40px;
-  right: 40px;
-  text-align: center;
-  color: #888;
-  font-size: 15px;
-  text-shadow: 0 0 3px #000;
 }
 .dock {
   position: absolute;
@@ -372,8 +355,7 @@ canvas {
   transform: translateY(4px);
 }
 .player:not([data-view="prism"]) canvas,
-.player:not([data-view="prism"]) .fallback,
-.player:not([data-view="prism"]) .hint {
+.player:not([data-view="prism"]) .fallback {
   visibility: hidden;
 }
 .gallery,
@@ -418,7 +400,8 @@ canvas {
   cursor: pointer;
 }
 .gallery-track::-webkit-scrollbar,
-.description-scroll::-webkit-scrollbar {
+.description-scroll::-webkit-scrollbar,
+.library::-webkit-scrollbar {
   display: none;
 }
 .gallery-track:focus-visible {
@@ -558,6 +541,7 @@ canvas {
   background: #0b0b0c;
   padding: 52px 40px 64px;
   overflow: auto;
+  scrollbar-width: none;
 }
 .library-toolbar {
   display: flex;
@@ -651,6 +635,7 @@ canvas {
   font-size: 14px;
 }
 #about {
+  --about-scale: 0.92;
   width: 300px;
   padding: 26px;
   border: 1px solid #ffffff2b;
@@ -662,13 +647,21 @@ canvas {
     inset 0 1px 0 #ffffff1a,
     0 20px 80px #0008;
   text-align: center;
+  opacity: 0;
+  scale: var(--about-scale);
+  transition:
+    opacity 0.2s ease-out,
+    scale 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
+    display 0.3s allow-discrete,
+    overlay 0.3s allow-discrete;
+}
+#about:popover-open {
+  opacity: 1;
+  scale: 1;
 }
 #about > img {
   display: block;
   margin: 0 auto 10px;
-}
-#about strong {
-  font-size: 22px;
 }
 #about p {
   font-size: 12px;
@@ -691,6 +684,23 @@ canvas {
 }
 #about::backdrop {
   background: #0004;
+  opacity: 0;
+  transition:
+    opacity 0.2s ease-out,
+    display 0.3s allow-discrete,
+    overlay 0.3s allow-discrete;
+}
+#about:popover-open::backdrop {
+  opacity: 1;
+}
+@starting-style {
+  #about:popover-open {
+    opacity: 0;
+    scale: var(--about-scale);
+  }
+  #about:popover-open::backdrop {
+    opacity: 0;
+  }
 }
 /* Without anchor positioning the popover stays centered in the viewport. */
 @supports (anchor-name: --player) {
@@ -728,6 +738,13 @@ canvas {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  #about {
+    --about-scale: 1;
+  }
+  #about,
+  #about::backdrop {
+    transition-duration: 0.12s;
+  }
   .download,
   .github,
   .dock i,
