@@ -23,11 +23,6 @@ Verc is a media player for Apple silicon and macOS 26+. It uses Swift 6, SwiftUI
 - `Sources/Verc/PictureInPicture.swift` and `SubtitleSurface.swift`: floating window and subtitle layout.
 - `Sources/Verc/PrismBackground.swift`, `PrismScene.swift`, and `Prism.metal`: Metal renderer, scene geometry, and shaders.
 - `Sources/VLC/`: C bridge, subtitle plugin, and snapshot plugin. Public headers are in `include/`.
-- `Resources/Info.plist`: app metadata and file extensions that `MediaItem` reads.
-- `scripts/build.sh` and `scripts/vlc-plugins.json`: app bundle assembly and VLC plugin selection.
-- `scripts/dmg.sh` and `scripts/dmg-background.swift`: DMG packaging for a built `dist/Verc.app`.
-- `.github/workflows/release.yml`: on a `v*.*.*` tag, builds, signs, notarizes, and uploads a draft GitHub release.
-- `Website/`: Cloudflare Worker for TMDB search and episode data, and the static site in `public/`.
 
 ## Code constraints
 
