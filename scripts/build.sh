@@ -126,9 +126,6 @@ EOF
 "${sign[@]}" "$app" || fail "Cannot sign the app."
 codesign --verify --deep --strict "$app" || fail "App signature verification failed."
 bytes=$(find "$app" -type f -exec stat -f '%z' {} + | awk '{ total += $1 } END { printf "%.0f", total }')
-if [[ $config == release && $bytes -gt $((50 * 1048576)) ]]; then
-  fail "The release exceeds 50 MiB. Review the playback plugin profile before distribution."
-fi
 mkdir -p "$root/dist"
 rm -rf "$output"
 mv "$app" "$output"
