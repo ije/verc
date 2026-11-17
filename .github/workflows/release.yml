@@ -111,15 +111,14 @@ jobs:
           export NOTARY_KEYCHAIN="$RUNNER_TEMP/verc-signing.keychain-db"
           ./scripts/dmg.sh
           cd dist
-          archive="Verc-${GITHUB_REF_NAME#v}-arm64.dmg"
-          shasum -a 256 "$archive" vlc-3.0.24.tar.xz > SHA256SUMS
+          shasum -a 256 Verc.dmg vlc-3.0.24.tar.xz > SHA256SUMS
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          assets=("dist/Verc-${GITHUB_REF_NAME#v}-arm64.dmg" dist/vlc-3.0.24.tar.xz dist/SHA256SUMS)
+          assets=(dist/Verc.dmg dist/vlc-3.0.24.tar.xz dist/SHA256SUMS)
           if gh release view "$GITHUB_REF_NAME" --json isDraft > "$RUNNER_TEMP/release.json"; then
             if ! jq -e '.isDraft' "$RUNNER_TEMP/release.json" > /dev/null; then
               echo '::error::This release is already public. Use a new version tag.'

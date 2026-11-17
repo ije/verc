@@ -6,8 +6,7 @@ root=$PWD
 app="$root/dist/Verc.app"
 [[ -d $app ]] || { printf 'Run ./scripts/build.sh first.\n' >&2; exit 1; }
 codesign --verify --deep --strict "$app"
-version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")
-output="$root/dist/Verc-$version-arm64.dmg"
+output="$root/dist/Verc.dmg"
 mkdir -p "$root/.build"
 work=$(mktemp -d "$root/.build/dmg.XXXXXX")
 trap 'rm -rf "$work"' EXIT

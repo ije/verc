@@ -16,6 +16,11 @@ function error(message, status, extraHeaders) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    if (url.pathname === "/verc.dmg")
+      return Response.redirect(
+        "https://github.com/ije/verc/releases/latest/download/Verc.dmg",
+        302,
+      );
     if (url.pathname !== "/tmdb") return error("Not found.", 404);
     if (request.method === "OPTIONS")
       return new Response(null, { status: 204, headers });
