@@ -18,9 +18,10 @@ struct ContentView: View {
     @State private var popup: PlayerPopup?
     @State private var playlistSelection: UUID?
     @FocusState private var playlistFocused: Bool
+    @FocusState private var playbackPromptFocused: Bool
 
     private var playlistVisible: Bool { showPlaylist && player.playlist.count > 1 }
-    private var modal: Bool { player.showInfo || player.showURL || player.showIconPicker || favorites.draft != nil }
+    private var modal: Bool { player.showInfo || player.showURL || player.showIconPicker || favorites.draft != nil || player.pendingPlayback != nil }
     private var hasAudioChoice: Bool { player.audioTracks.lazy.filter { $0.id != -1 }.prefix(2).count > 1 }
     private var headerTitle: String {
         guard let current = player.current else { return favorites.showAllMedia ? "Library" : favorites.selectedPage?.displayTitle ?? "" }
@@ -129,6 +130,7 @@ struct ContentView: View {
             .onChange(of: player.showURL) { revealControls() }
             .onChange(of: player.showInfo) { revealControls() }
             .onChange(of: player.showIconPicker) { popup = nil; revealControls() }
+            .onChange(of: player.pendingPlayback != nil) { revealControls() }
             .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in player.isFullScreen = true }
             .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in player.isFullScreen = false }
             .onReceive(NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)) { notification in
@@ -188,8 +190,38 @@ struct ContentView: View {
                 if modal {
                     ZStack {
                         Color.black.opacity(0.18).ignoresSafeArea().accessibilityHidden(true)
-                            .onTapGesture { player.showIconPicker = false }
-                        if player.showIconPicker { IconPicker(isPresented: $player.showIconPicker) }
+                            .onTapGesture { player.showIconPicker = false; player.pendingPlayback = nil }
+                        if let request = player.pendingPlayback {
+                            VStack(alignment: .leading, spacing: 18) {
+                                Text(request.progress.finished ? "Play Again?" : "Resume Playback?")
+                                    .font(.title2.weight(.semibold))
+                                Text(request.progress.finished ? "Play “\(request.item.title)” from the start?"
+                                     : "Resume “\(request.item.title)” from \(timeLabel(min(request.progress.time, request.progress.duration))), or restart from the beginning?")
+                                    .font(.system(size: 13)).fixedSize(horizontal: false, vertical: true)
+                                HStack {
+                                    Spacer()
+                                    Button("Restart") {
+                                        player.pendingPlayback = nil
+                                        request.play(true)
+                                    }
+                                    .keyboardShortcut(request.progress.finished ? .defaultAction : nil)
+                                    if !request.progress.finished {
+                                        Button("Resume") {
+                                            player.pendingPlayback = nil
+                                            request.play(false)
+                                        }
+                                        .buttonStyle(.glassProminent).keyboardShortcut(.defaultAction)
+                                    }
+                                }
+                                .buttonStyle(.glass).buttonBorderShape(.capsule).controlSize(.large)
+                            }
+                            .padding(24).frame(width: 360)
+                            .glassEffect(.regular.tint(.black.opacity(0.25)), in: RoundedRectangle(cornerRadius: 20))
+                            .focusable().focused($playbackPromptFocused).focusEffectDisabled()
+                            .onAppear { playbackPromptFocused = true }
+                            .onExitCommand { player.pendingPlayback = nil }
+                            .accessibilityAddTraits(.isModal)
+                        } else if player.showIconPicker { IconPicker(isPresented: $player.showIconPicker) }
                         else if let pages = favorites.draft {
                             GeometryReader { geometry in
                                 let compact = geometry.size.height < 580
@@ -225,7 +257,7 @@ struct ContentView: View {
     private func revealControls() {
         hideTask?.cancel()
         controlsVisible = true
-        guard player.isPlaying, !chromeHovered, !scrubbing, popup == nil, !showPlaylist, trackedMenus.isEmpty, !player.showURL, !player.showInfo, !player.showIconPicker else { return }
+        guard player.isPlaying, !chromeHovered, !scrubbing, popup == nil, !showPlaylist, trackedMenus.isEmpty, !modal else { return }
         hideTask = Task {
             do { try await Task.sleep(for: .seconds(2.5)) } catch { return }
             withAnimation(.easeOut(duration: 0.2)) { controlsVisible = false }
@@ -314,8 +346,7 @@ struct ContentView: View {
                             let playing = player.current?.id == item.id
                             let selected = playlistSelection == item.id
                             Button {
-                                if !playing { player.play(item) }
-                                showPlaylist = false
+                                playPlaylistItem(item)
                             } label: {
                                 HStack(spacing: 12) {
                                     if let artwork = item.artwork {
@@ -377,12 +408,18 @@ struct ContentView: View {
         }
         .onKeyPress(.return) {
             guard playlistVisible, let item = player.playlist.first(where: { $0.id == playlistSelection }) else { return .ignored }
-            if player.current?.id != item.id { player.play(item) }
-            else if !player.isPlaying { player.togglePlay() }
-            showPlaylist = false
+            playPlaylistItem(item)
             return .handled
         }
         .onExitCommand { showPlaylist = false }
+    }
+
+    private func playPlaylistItem(_ item: MediaItem) {
+        player.requestPlay(item) { restart in
+            if restart || player.current?.id != item.id { player.play(item, restart: restart) }
+            else if !player.isPlaying { player.togglePlay() }
+            showPlaylist = false
+        }
     }
 
     private var stage: some View {

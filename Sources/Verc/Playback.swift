@@ -515,6 +515,7 @@ final class VLC: @unchecked Sendable {
     private(set) var playlist: [MediaItem] = []
     private(set) var playlistTitle: String?
     private(set) var progress: [URL: PlaybackProgress] = [:]
+    var pendingPlayback: (item: MediaItem, progress: PlaybackProgress, play: (Bool) -> Void)?
     var state = PlaybackState.idle
     var time = 0.0
     var duration = 0.0
@@ -850,7 +851,7 @@ final class VLC: @unchecked Sendable {
         }
     }
 
-    func add(_ urls: [URL], startingAt selected: URL? = nil, page: FavoritePage? = nil) {
+    func add(_ urls: [URL], startingAt selected: URL? = nil, page: FavoritePage? = nil, restart: Bool = false) {
         if openLibrary?(urls) == true { return }
         let isSubtitle = { (url: URL) in MediaItem.subtitleExtensions.contains(url.pathExtension.lowercased()) }
         let subtitles = urls.filter(isSubtitle)
@@ -869,7 +870,7 @@ final class VLC: @unchecked Sendable {
             playlist = items
             playlistTitle = page?.info?.title
             playlist[index].subtitles = subtitles
-            play(playlist[index])
+            play(playlist[index], restart: restart)
             durationTask = Task { [weak self, engine] in
                 guard items.count > 1, let engine else { return }
                 let readable = items.indices.filter { items[$0].url.isFileURL && !items[$0].isImage }
@@ -950,8 +951,16 @@ final class VLC: @unchecked Sendable {
         }
     }
 
+    func requestPlay(_ item: MediaItem, play: @escaping (Bool) -> Void) {
+        saveProgress()
+        if !item.isImage, let saved = progress[item.url], saved.time > 0 || saved.finished {
+            pendingPlayback = (item, saved, play)
+        } else { play(false) }
+    }
+
     func play(_ item: MediaItem, restart: Bool = false) {
         defer { updateNowPlaying() }
+        pendingPlayback = nil
         saveProgress()
         seekFeedbackTask?.cancel()
         seekSeconds = nil
@@ -1046,6 +1055,7 @@ final class VLC: @unchecked Sendable {
     }
 
     func stop() {
+        pendingPlayback = nil
         saveProgress()
         seekFeedbackTask?.cancel()
         seekSeconds = nil

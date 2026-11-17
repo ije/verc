@@ -366,10 +366,10 @@ private struct FavoriteGallery: View {
                                 .id(info.url)
                         }
                         ForEach(page.media, id: \.self) { url in
-                            let item = MediaItem(url: url)
-                            FavoriteMediaCard(item: item, title: page.title(for: url), artwork: page.artwork(for: url), player: player,
-                                              lastPlayed: page.media.count > 1 && url == latest, width: width) {
-                                player.add(page.media, startingAt: url, page: page)
+                            let item = MediaItem(url: url, name: page.title(for: url))
+                            FavoriteMediaCard(item: item, artwork: page.artwork(for: url), player: player,
+                                              lastPlayed: page.media.count > 1 && url == latest, width: width) { restart in
+                                player.add(page.media, startingAt: url, page: page, restart: restart)
                             }
                         }
                     }
@@ -505,21 +505,18 @@ private struct FavoriteDetails: View {
 
 private struct FavoriteMediaCard: View {
     let item: MediaItem
-    let title: String
     let artwork: URL?
     let player: PlayerModel
     let lastPlayed: Bool
     let width: CGFloat
-    let open: () -> Void
+    let open: (Bool) -> Void
     @State private var preview: MediaPreview?
-    @State private var confirmRestart = false
     @State private var hovered = false
 
     var body: some View {
         let progress = player.progress[item.url]
         Button {
-            if progress?.finished == true { confirmRestart = true }
-            else { open() }
+            player.requestPlay(item, play: open)
         } label: {
             VStack(alignment: .leading, spacing: 14) {
                 FavoriteArtwork(url: artwork ?? item.url, image: preview?.image,
@@ -527,18 +524,14 @@ private struct FavoriteMediaCard: View {
                     .frame(width: width, height: width * 9 / 16)
                     .clipShape(RoundedRectangle(cornerRadius: 24))
                     .modifier(PlaybackBadges(item: item, lastPlayed: lastPlayed, duration: preview?.duration ?? progress?.duration, hovered: hovered, inset: 18))
-                Text(title).font(.system(size: 14, weight: .semibold)).lineLimit(1)
+                Text(item.title).font(.system(size: 14, weight: .semibold)).lineLimit(1)
                     .padding(.horizontal, 4)
             }
             .frame(width: width, alignment: .leading).contentShape(Rectangle())
         }
-        .buttonStyle(.plain).accessibilityLabel("Open \(title)")
+        .buttonStyle(.plain).accessibilityLabel("Open \(item.title)")
         .onHover { hovered = $0 }
         .accessibilityValue(item.isImage ? "" : progress?.finished == true ? "Finished" : "\(Int((progress?.fraction ?? 0) * 100))% played")
-        .alert("Play Again?", isPresented: $confirmRestart) {
-            Button("Play Again", action: open)
-            Button("Cancel", role: .cancel) {}
-        } message: { Text("Play “\(title)” from the start?") }
         .task(id: [player.engineVersion, artwork?.absoluteString, item.url.absoluteString]) {
             preview = nil
             guard player.engineVersion != nil, let engine = player.engine else { return }
