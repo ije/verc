@@ -10,6 +10,7 @@ import {
 const player = document.querySelector(".player"),
   canvas = player.querySelector("canvas");
 const motion = matchMedia("(prefers-reduced-motion: reduce)");
+const restingAim = [0.97, 0.85];
 let device,
   frame = 0,
   resizeObserver,
@@ -168,6 +169,8 @@ try {
       "copyScene",
       "bloomExtract",
       "bloomBlur",
+      "composeScene",
+      "antialiasScene",
       "presentScene",
     ].map(async (entryPoint) => {
       const isLight = entryPoint === "lightFragment",
@@ -242,7 +245,7 @@ try {
     scene,
     multisample,
     backGroup,
-    bloomPasses = [],
+    postprocessPasses = [],
     presentGroup;
   let visible = true,
     active = player.dataset.view === "prism",
@@ -253,8 +256,8 @@ try {
     time = 0;
   let orbit = [0, 0],
     orbitTarget = [0, 0],
-    aim = [0.022, 0.45],
-    aimTarget = [0.022, 0.45],
+    aim = [...restingAim],
+    aimTarget = [...restingAim],
     wall = [0, 0];
 
   function render(now) {
@@ -318,7 +321,7 @@ try {
       for (const buffer of blurBuffers) buffer.destroy();
       targets = [];
       blurBuffers = [];
-      bloomPasses = [];
+      postprocessPasses = [];
       const bloom = [];
       for (const [name, divisor, samples] of [
         ["multisample", 1, 4],
@@ -348,7 +351,7 @@ try {
       }
       [multisample, backdrop, scene] = targets;
       backGroup = textures([backdrop]);
-      bloomPasses.push({
+      postprocessPasses.push({
         target: targets[3],
         pipeline: pipelines.bloomExtract,
         group: textures([scene]),
@@ -372,7 +375,7 @@ try {
           new Float32Array(buffer.getMappedRange()).set([...direction, 0, 0]);
           buffer.unmap();
           blurBuffers.push(buffer);
-          bloomPasses.push({
+          postprocessPasses.push({
             target,
             pipeline: pipelines.bloomBlur,
             group: textures([source], buffer),
@@ -381,6 +384,10 @@ try {
         bloom.push(vertical);
       }
       presentGroup = textures([scene, ...bloom]);
+      postprocessPasses.push(
+        { target: backdrop, pipeline: pipelines.composeScene, group: presentGroup },
+        { target: scene, pipeline: pipelines.antialiasScene, group: backGroup },
+      );
       resized = false;
       dirty = true;
     }
@@ -460,7 +467,7 @@ try {
       pass.setIndexBuffer(buffers.indices, "uint16");
       pass.drawIndexed(glass.indices.length);
       pass.end();
-      for (const step of bloomPasses) {
+      for (const step of postprocessPasses) {
         pass = encoder.beginRenderPass({
           colorAttachments: [
             {
@@ -543,8 +550,8 @@ try {
     schedule();
   });
   motion.addEventListener("change", () => {
-    aim = [0.022, 0.45];
-    aimTarget = [0.022, 0.45];
+    aim = [...restingAim];
+    aimTarget = [...restingAim];
     orbit = [0, 0];
     orbitTarget = [0, 0];
     dirty = lightDirty = true;

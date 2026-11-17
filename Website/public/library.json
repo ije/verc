@@ -1,6 +1,7 @@
 [
   {
     "id": 25538,
+    "trailerID": "PxgrzNFwyqY",
     "mediaType": "movie",
     "title": "Yi Yi",
     "overview": "Each member of a family in Taipei asks hard questions about life's meaning as they live through everyday quandaries. NJ is morose: his brother owes him money, his mother is in a coma, his wife suffers a spiritual crisis when she finds her life a blank and his business partners make bad decisions.",
@@ -39,6 +40,7 @@
   },
   {
     "id": 1438,
+    "trailerID": "uDcQbk78CSw",
     "mediaType": "tv",
     "title": "The Wire",
     "overview": "Told from the points of view of both the Baltimore homicide and narcotics detectives and their targets, the series captures a universe in which the national war on drugs has become a permanent, self-sustaining bureaucracy, and distinctions between good and evil are routinely obliterated.",
@@ -177,6 +179,7 @@
   },
   {
     "id": 204154,
+    "trailerID": "NWQH8cMpWTU",
     "mediaType": "tv",
     "title": "Scavengers Reign",
     "overview": "When a deep space freighter is damaged by a solar flare its surviving crew are stranded on a beautiful and unforgiving planet. They begin to learn the true nature of this planet as they try to survive long enough to escape or be rescued.",
@@ -308,6 +311,7 @@
   },
   {
     "id": 603,
+    "trailerID": "nUEQNVV3Gfs",
     "mediaType": "movie",
     "title": "The Matrix",
     "overview": "Set in the 22nd century, The Matrix tells the story of a computer hacker who joins a group of underground insurgents fighting the vast and powerful computers who now rule the earth.",
@@ -346,6 +350,7 @@
   },
   {
     "id": 30991,
+    "trailerID": "QCaEJZqLeTU",
     "mediaType": "tv",
     "title": "Cowboy Bebop",
     "overview": "In 2071, roughly fifty years after an accident with a hyperspace gateway made the Earth almost uninhabitable, humanity has colonized most of the rocky planets and moons of the Solar System. Amid a rising crime rate, the Inter Solar System Police (ISSP) set up a legalized contract system, in which registered bounty hunters, also referred to as \"Cowboys\", chase criminals and bring them in alive in return for a reward.",
@@ -574,6 +579,7 @@
   },
   {
     "id": 334541,
+    "trailerID": "obdKk_sYQNI",
     "mediaType": "movie",
     "title": "Manchester by the Sea",
     "overview": "After his older brother passes away, Lee Chandler is forced to return home to care for his 16-year-old nephew. There he is compelled to deal with a tragic past that separated him from his family and the community where he was born and raised.",
@@ -612,6 +618,7 @@
   },
   {
     "id": 62,
+    "trailerID": "kR2r-A9H3Kg",
     "mediaType": "movie",
     "title": "2001: A Space Odyssey",
     "overview": "Humanity finds a mysterious object buried beneath the lunar surface and sets off to find its origins with the help of HAL 9000, the world's most advanced super computer.",
@@ -650,6 +657,7 @@
   },
   {
     "id": 274,
+    "trailerID": "6iB21hsprAQ",
     "mediaType": "movie",
     "title": "The Silence of the Lambs",
     "overview": "Clarice Starling is a top student at the FBI's training academy.  Jack Crawford wants Clarice to interview Dr. Hannibal Lecter, a brilliant psychiatrist who is also a violent psychopath, serving life behind bars for various acts of murder and cannibalism.  Crawford believes that Lecter may have insight into a case and that Starling, as an attractive young woman, may be just the bait to draw him out.",
@@ -688,6 +696,7 @@
   },
   {
     "id": 10494,
+    "trailerID": "RrWausp8zDQ",
     "mediaType": "movie",
     "title": "Perfect Blue",
     "overview": "Rising pop star Mima Kirigoe quits singing to pursue a career as an actress. After she takes up a role on a popular detective show, her handlers and collaborators begin turning up murdered. Harboring feelings of guilt and haunted by visions of her former self, Mima's reality and fantasy meld into a frenzied paranoia.",
@@ -726,6 +735,7 @@
   },
   {
     "id": 915935,
+    "trailerID": "FUXawkH-ONM",
     "mediaType": "movie",
     "title": "Anatomy of a Fall",
     "overview": "A woman is suspected of her husband's murder, and their blind son faces a moral dilemma as the sole witness.",
@@ -759,6 +769,95 @@
         "title": "Anatomy of a Fall",
         "stillURL": "/assets/915935-backdrop.jpg",
         "url": "https://www.themoviedb.org/movie/915935"
+      }
+    ]
+  },
+  {
+    "id": 1075,
+    "trailerID": "Lxw0ea_UiZ4",
+    "mediaType": "movie",
+    "title": "Black Cat, White Cat",
+    "overview": "A small-time hustler makes a deal with a notorious gangster to whom he owes money: marry his teenage son to the latter's daughter. However, the young lovers are not as agreeable.",
+    "releaseDate": "1998-06-01",
+    "posterURL": "/assets/1075-poster.jpg",
+    "backgroundURL": "/assets/1075-backdrop.jpg",
+    "url": "https://www.themoviedb.org/movie/1075",
+    "credits": [
+      {
+        "role": "Director",
+        "names": [
+          "Emir Kusturica"
+        ]
+      },
+      {
+        "role": "Writer",
+        "names": [
+          "Emir Kusturica",
+          "Gordan Mihić"
+        ]
+      },
+      {
+        "role": "Cast",
+        "names": [
+          "Bajram Severdžan",
+          "Srđan 'Žika' Todorović",
+          "Zabit Memedov",
+          "Florijan Ajdini",
+          "Branka Katić",
+          "Ljubica Adžović"
+        ]
+      }
+    ],
+    "media": [
+      {
+        "title": "Black Cat, White Cat",
+        "stillURL": "/assets/1075-backdrop.jpg",
+        "url": "https://www.themoviedb.org/movie/1075"
+      }
+    ]
+  },
+  {
+    "id": 24858,
+    "trailerID": "dPtApSuqCJw",
+    "mediaType": "movie",
+    "title": "Eternity and a Day",
+    "overview": "Famous writer Alexander contracts a terminal illness. He receives a letter from his wife describing a summer day 30 years ago, and leaves his seaside home to remember his past. This journey will allow him to wander between the past and the present, and encounter unexpected people, allowing him to collect unforgettable memories in the final moments of his life.",
+    "releaseDate": "1998-10-23",
+    "posterURL": "/assets/24858-poster.jpg",
+    "backgroundURL": "/assets/24858-backdrop.jpg",
+    "url": "https://www.themoviedb.org/movie/24858",
+    "credits": [
+      {
+        "role": "Director",
+        "names": [
+          "Theo Angelopoulos"
+        ]
+      },
+      {
+        "role": "Writer",
+        "names": [
+          "Petros Markaris",
+          "Tonino Guerra",
+          "Theo Angelopoulos"
+        ]
+      },
+      {
+        "role": "Cast",
+        "names": [
+          "Bruno Ganz",
+          "Fabrizio Bentivoglio",
+          "Isabelle Renauld",
+          "Achileas Skevis",
+          "Alexandra Ladikou",
+          "Despina Bebedelli"
+        ]
+      }
+    ],
+    "media": [
+      {
+        "title": "Eternity and a Day",
+        "stillURL": "/assets/24858-backdrop.jpg",
+        "url": "https://www.themoviedb.org/movie/24858"
       }
     ]
   }

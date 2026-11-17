@@ -5,6 +5,11 @@ SPDX-License-Identifier: GPL-2.0-only
 Source: https://github.com/ije/verc/tree/main/Website
 License: LICENSE.txt
 
+The website uses Geist Sans.
+Copyright 2026 The Geist Project Authors.
+Its SIL Open Font License is in Geist-LICENSE.txt.
+Source: https://github.com/vercel/geist-font
+
 The WebGPU prism ports Verc's Metal scene, adapted from vgpu by Vercel.
 Copyright (c) 2025 Vercel, Inc.
 Its MIT license is in Vgpu-LICENSE.txt.

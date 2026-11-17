@@ -8,7 +8,8 @@ const tooltip = player.querySelector(".poster-tooltip"),
   title = player.querySelector(".window-title");
 const track = gallery.querySelector(".gallery-track"),
   details = track.querySelector(".details"),
-  credits = gallery.querySelector(".credits");
+  credits = gallery.querySelector(".credits"),
+  trailerButton = gallery.querySelector(".trailer-button");
 const posters = library.querySelector(".posters"),
   count = library.querySelector(".count"),
   noResults = library.querySelector(".no-results");
@@ -70,6 +71,20 @@ function resize() {
 }
 
 new ResizeObserver(resize).observe(player);
+new IntersectionObserver(
+  ([entry]) => entry.target.classList.toggle("expanded", entry.isIntersecting),
+  { threshold: 0.85 },
+).observe(player.parentElement);
+
+trailerButton.addEventListener("click", () => {
+  player.dispatchEvent(
+    new CustomEvent("playtrailer", { detail: items[selected - 1] }),
+  );
+});
+player.addEventListener("closetrailer", () => {
+  select(selected);
+  trailerButton.focus({ preventScroll: true });
+});
 
 function select(index) {
   selected = index;
@@ -260,7 +275,7 @@ try {
     if (
       event.pointerType !== "mouse" ||
       event.button !== 0 ||
-      event.target.closest(".tmdb-link")
+      event.target.closest(".media-actions")
     )
       return;
     drag = { x: event.clientX, scroll: track.scrollLeft };
@@ -294,6 +309,7 @@ try {
     }
   });
   player.addEventListener("keydown", (event) => {
+    if (player.dataset.view === "trailer") return;
     if (event.key === "Escape") {
       select(0);
       dots[0].focus({ preventScroll: true });

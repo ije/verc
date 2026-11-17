@@ -206,13 +206,48 @@ fn backSurface(position: vec3f, normal: vec3f) -> vec4f {
     }
     return vec4f(color / total, 1);
 }
-fn hash(value: vec2f) -> f32 { return fract(sin(dot(value, vec2f(127.1, 311.7))) * 43758.5453); }
-@fragment fn presentScene(in: ScreenVertex) -> @location(0) vec4f {
+@fragment fn composeScene(in: ScreenVertex) -> @location(0) vec4f {
     let original = textureSampleLevel(source, linearSampler, in.uv, 0).rgb;
     let light = textureSampleLevel(bloom0, linearSampler, in.uv, 0).rgb
         + textureSampleLevel(bloom1, linearSampler, in.uv, 0).rgb * .8
         + textureSampleLevel(bloom2, linearSampler, in.uv, 0).rgb * .55;
-    let color = toSrgb(tonemap(max(original + light * (.7 / 2.35), vec3f(0))));
+    return vec4f(toSrgb(tonemap(max(original + light * (.7 / 2.35), vec3f(0)))), 1);
+}
+@fragment fn antialiasScene(in: ScreenVertex) -> @location(0) vec4f {
+    let texel = 1 / vec2f(textureDimensions(source));
+    let center = textureLoad(source, vec2i(in.position.xy), 0).rgb;
+    let nw = textureSampleLevel(source, linearSampler, in.uv + vec2f(-1, -1) * texel, 0).rgb;
+    let ne = textureSampleLevel(source, linearSampler, in.uv + vec2f(1, -1) * texel, 0).rgb;
+    let sw = textureSampleLevel(source, linearSampler, in.uv + vec2f(-1, 1) * texel, 0).rgb;
+    let se = textureSampleLevel(source, linearSampler, in.uv + vec2f(1, 1) * texel, 0).rgb;
+    let luma = vec3f(.299, .587, .114);
+    let middle = dot(center, luma);
+    let neighbors = vec4f(dot(nw, luma), dot(ne, luma), dot(sw, luma), dot(se, luma));
+    let low = min(middle, min(min(neighbors.x, neighbors.y), min(neighbors.z, neighbors.w)));
+    let high = max(middle, max(max(neighbors.x, neighbors.y), max(neighbors.z, neighbors.w)));
+    let contrast = high - low;
+    if (contrast < max(.03125, high * .125)) { return vec4f(center, 1); }
+
+    let average = dot(neighbors, vec4f(.25));
+    var direction = vec2f(neighbors.z + neighbors.w - neighbors.x - neighbors.y,
+                          neighbors.x + neighbors.z - neighbors.y - neighbors.w);
+    let reduction = max(average * .125, .0078125);
+    direction = clamp(direction / (min(abs(direction.x), abs(direction.y)) + reduction), vec2f(-8), vec2f(8)) * texel;
+    let narrow = (textureSampleLevel(source, linearSampler, in.uv - direction / 6, 0).rgb
+                + textureSampleLevel(source, linearSampler, in.uv + direction / 6, 0).rgb) * .5;
+    let wide = narrow * .5 + (textureSampleLevel(source, linearSampler, in.uv - direction * .5, 0).rgb
+                           + textureSampleLevel(source, linearSampler, in.uv + direction * .5, 0).rgb) * .25;
+    let brightness = dot(wide, luma);
+    let filtered = select(wide, narrow, brightness < low || brightness > high);
+    let subpixel = smoothstep(0, 1, abs(middle - average) / contrast);
+    return vec4f(mix(filtered, (nw + ne + sw + se) * .25, subpixel * subpixel * .5), 1);
+}
+fn hash(value: vec2f) -> f32 { return fract(sin(dot(value, vec2f(127.1, 311.7))) * 43758.5453); }
+@fragment fn presentScene(in: ScreenVertex) -> @location(0) vec4f {
+    let color = textureLoad(source, vec2i(in.position.xy), 0).rgb;
+    let light = textureSampleLevel(bloom0, linearSampler, in.uv, 0).rgb
+        + textureSampleLevel(bloom1, linearSampler, in.uv, 0).rgb * .8
+        + textureSampleLevel(bloom2, linearSampler, in.uv, 0).rgb * .55;
     let grid = in.uv * vec2f(190, 118);
     let cell = floor(grid);
     let seed = hash(cell);
