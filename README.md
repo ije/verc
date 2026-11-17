@@ -1,6 +1,6 @@
 # Verc
 
-A media player with modern UI, built with SwiftUI and VLC.
+A media player with modern UI for macOS, powsered by VLC.
 
 ## Development
 
