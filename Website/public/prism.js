@@ -4,6 +4,7 @@ import {
   lightLayout,
   planes,
   spectrum,
+  triangle,
   view,
 } from "./scene.js";
 
@@ -52,8 +53,9 @@ try {
     if (message.type === "error")
       throw new Error(`${message.lineNum}: ${message.message}`);
 
-  const uniforms = new Float32Array(52);
-  new Uint32Array(uniforms.buffer, 48 * 4).set([
+  const uniforms = new Float32Array(60);
+  uniforms[55] = (planes[3][3] - planes[4][3]) / 2;
+  new Uint32Array(uniforms.buffer, 56 * 4).set([
     lightLayout.slices,
     lightLayout.slices,
     lightLayout.samples,
@@ -172,16 +174,21 @@ try {
       "composeScene",
       "antialiasScene",
       "presentScene",
+      "particleLight",
+      "dustFragment",
     ].map(async (entryPoint) => {
       const isLight = entryPoint === "lightFragment",
-        isGlass = entryPoint.startsWith("glass");
+        isGlass = entryPoint.startsWith("glass"),
+        isDust = entryPoint === "dustFragment";
       const vertex = {
         module: shader,
         entryPoint: isLight
           ? "lightVertex"
           : isGlass
             ? "glassVertex"
-            : "screenVertex",
+            : isDust
+              ? "dustVertex"
+              : "screenVertex",
       };
       if (isLight)
         vertex.buffers = [
@@ -201,9 +208,10 @@ try {
           },
         ];
       const target = {
-        format: entryPoint === "presentScene" ? format : "rgba16float",
+        format:
+          entryPoint === "presentScene" || isDust ? format : "rgba16float",
       };
-      if (isLight) target.blend = additive;
+      if (isLight || isDust) target.blend = additive;
       if (entryPoint === "glassBack") target.blend = premultiplied;
       pipelines[entryPoint] = await device.createRenderPipelineAsync({
         layout,
@@ -246,7 +254,8 @@ try {
     multisample,
     backGroup,
     postprocessPasses = [],
-    presentGroup;
+    presentGroup,
+    dustGroup;
   let visible = true,
     active = player.dataset.view === "prism",
     dirty = true,
@@ -258,7 +267,8 @@ try {
     orbitTarget = [0, 0],
     aim = [...restingAim],
     aimTarget = [...restingAim],
-    wall = [0, 0];
+    wall = [0, 0],
+    dustWall = [0, 0];
 
   function render(now) {
     frame = 0;
@@ -313,7 +323,8 @@ try {
           }
         }
       }
-      wall = [worst * 1.02 * aspect, worst * 1.02].map(
+      dustWall = [worst * 1.02 * aspect, worst * 1.02];
+      wall = dustWall.map(
         (value) => value * Math.min(2.5, Math.max(1, 1 / aspect)),
       );
       lightDirty = true;
@@ -334,6 +345,8 @@ try {
         ["vertical1", 4, 1],
         ["horizontal2", 8, 1],
         ["vertical2", 8, 1],
+        ["particle", 16, 1],
+        ["particleBlur", 16, 1],
       ]) {
         const texture = device.createTexture({
           label: name,
@@ -383,6 +396,28 @@ try {
         }
         bloom.push(vertical);
       }
+      const [particle, particleBlur] = targets.slice(10);
+      for (const [target, source, parameters] of [
+        [particle, scene, [1 / particle.width, 1 / particle.height]],
+        [particleBlur, particle, [1 / particle.width, 0]],
+        [particle, particleBlur, [0, 1 / particle.height]],
+      ]) {
+        const buffer = device.createBuffer({
+          size: 16,
+          usage: GPUBufferUsage.UNIFORM,
+          mappedAtCreation: true,
+        });
+        new Float32Array(buffer.getMappedRange()).set([...parameters, 0, 0]);
+        buffer.unmap();
+        blurBuffers.push(buffer);
+        postprocessPasses.push({
+          target,
+          pipeline:
+            source === scene ? pipelines.particleLight : pipelines.bloomBlur,
+          group: textures([source], buffer),
+        });
+      }
+      dustGroup = textures([targets[7], particle]);
       presentGroup = textures([scene, ...bloom]);
       postprocessPasses.push(
         {
@@ -420,9 +455,22 @@ try {
       const camera = view(canvas.width / canvas.height, orbit);
       uniforms.set(camera.matrix);
       uniforms.set([...camera.position, 1.5], 16);
-      uniforms.set([canvas.width, canvas.height, 0, 0], 20);
+      uniforms.set([canvas.width, canvas.height, ...dustWall], 20);
+      const m = camera.matrix;
+      uniforms.set(
+        triangle.flatMap(([x, y]) => {
+          const z = planes[3][3],
+            w = m[3] * x + m[7] * y + m[11] * z + m[15];
+          return [
+            ((m[0] * x + m[4] * y + m[8] * z + m[12]) / w) * 0.5 + 0.5,
+            ((-m[1] * x - m[5] * y - m[9] * z - m[13]) / w) * 0.5 + 0.5,
+          ];
+        }),
+        48,
+      );
     }
-    uniforms[24] = time;
+    // prism.wgsl makes dust motion repeat every 3600 seconds, so this wrap is seamless.
+    uniforms[24] = time % 3600;
     device.queue.writeBuffer(uniformBuffer, 0, uniforms);
     const encoder = device.createCommandEncoder();
     if (dirty) {
@@ -504,6 +552,9 @@ try {
     pass.setBindGroup(0, sceneGroup);
     pass.setBindGroup(1, presentGroup);
     pass.draw(3);
+    pass.setPipeline(pipelines.dustFragment);
+    pass.setBindGroup(1, dustGroup);
+    pass.draw(6, 2200);
     pass.end();
     device.queue.submit([encoder.finish()]);
     player.classList.add("ready");
