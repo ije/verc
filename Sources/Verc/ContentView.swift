@@ -457,7 +457,7 @@ struct ContentView: View {
                   if let artwork = item.artwork {
                     FavoriteArtwork(url: artwork, symbol: "film", symbolSize: 16, maxPixelSize: 160)
                       .frame(width: 56, height: 32)
-                      .clipShape(RoundedRectangle(cornerRadius: 5))
+                      .coverBorder(cornerRadius: 5)
                       .overlay {
                         if playing {
                           Image(systemName: "play.fill").font(.system(size: 12))

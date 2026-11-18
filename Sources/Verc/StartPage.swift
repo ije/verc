@@ -132,7 +132,7 @@ struct StartPage: View {
           GeometryReader { proxy in
             let dot = proxy[anchor]
             FavoriteArtwork(url: page.artworkURL(poster), background: true, maxPixelSize: 320)
-              .frame(width: 96, height: 144).clipShape(RoundedRectangle(cornerRadius: 6))
+              .frame(width: 96, height: 144).coverBorder(cornerRadius: 6)
               .padding(6).padding(.bottom, 8)
               .glassEffect(
                 .regular.tint(.black.opacity(0.2)),
@@ -334,11 +334,7 @@ private struct FavoriteLibrary: View {
                   }
                 }
                 .aspectRatio(2 / 3, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay {
-                  RoundedRectangle(cornerRadius: 12).strokeBorder(
-                    .white.opacity(0.12), lineWidth: 0.5)
-                }
+                .coverBorder(cornerRadius: 12)
                 VStack(alignment: .leading, spacing: 0) {
                   Text(title).font(.system(size: 13, weight: .medium)).lineLimit(1)
                   Group {
@@ -495,10 +491,7 @@ private struct FavoriteDetails: View {
       if let poster = info.posterURL {
         FavoriteArtwork(url: page.artworkURL(poster))
           .frame(width: height * 2 / 3, height: height)
-          .clipShape(RoundedRectangle(cornerRadius: 16))
-          .overlay {
-            RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.18), lineWidth: 1)
-          }
+          .coverBorder(cornerRadius: 16)
           .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
           .scaleEffect(1.15, anchor: .center)
           .padding(.trailing, height * 0.05)
@@ -621,7 +614,7 @@ private struct FavoriteMediaCard: View {
           loading: artwork == nil && preview == nil && player.engineError == nil
         )
         .frame(width: width, height: width * 9 / 16)
-        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .coverBorder(cornerRadius: 24)
         .modifier(
           PlaybackBadges(
             item: item, lastPlayed: lastPlayed, duration: preview?.duration ?? progress?.duration,
@@ -687,6 +680,15 @@ private struct PlaybackBadges: ViewModifier {
             .padding(inset)
         }
       }
+  }
+}
+
+extension View {
+  func coverBorder(cornerRadius: CGFloat) -> some View {
+    let shape = RoundedRectangle(cornerRadius: cornerRadius)
+    return clipShape(shape).overlay {
+      shape.strokeBorder(.white.opacity(0.1), lineWidth: 1).allowsHitTesting(false)
+    }
   }
 }
 
@@ -824,7 +826,7 @@ struct FavoriteEditor: View {
           HStack(alignment: .top, spacing: 12) {
             if let poster = info.posterURL {
               FavoriteArtwork(url: page.artworkURL(poster), background: true, maxPixelSize: 160)
-                .frame(width: 52, height: 78).clipShape(RoundedRectangle(cornerRadius: 6))
+                .frame(width: 52, height: 78).coverBorder(cornerRadius: 6)
             }
             VStack(alignment: .leading, spacing: 4) {
               Text(info.title).font(.system(size: 13, weight: .semibold))
