@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2
+
+- Fix some bugs
+
 ## 0.1.1
 
 - [UI] Unify cover borders
