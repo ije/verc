@@ -1,6 +1,6 @@
 # Verc
 
-A media player with modern UI for macOS, powsered by VLC.
+A media player with a modern UI for macOS, powered by VLC.
 
 ## Development
 
