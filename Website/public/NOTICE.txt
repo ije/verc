@@ -47,6 +47,10 @@ spectral light mesh, optical equations, studio reflections, bloom, and dust.
 Copyright (c) 2025 Vercel, Inc. Its MIT license is in Vgpu-LICENSE.txt.
 Source: https://github.com/vercel-labs/vgpu/tree/9c23f6c02db06cff4a4c4d38656c0e6f1bda203f/apps/docs/app/%5Blang%5D/%28home%29/components/prism-background
 
+The website copies the standalone Distortion Waves core from Libraries.dev.
+Copyright (c) 2026 Jakub Antalik. Its MIT license is in distortion-waves/LICENSE.txt.
+Source: https://github.com/Jakubantalik/Libraries.dev/tree/371b324a253b8ee71b9ce1bc8a1ecc5a59e1a16a/packages/distortion-waves
+
 Verc uses the TMDB API for movie and TV information and artwork, but Verc is not
 endorsed or certified by TMDB. TMDB.svg is the TMDB logo, and TMDB terms apply to it.
 Source: https://www.themoviedb.org/

@@ -185,9 +185,11 @@ h2 {
   vertical-align: -0.08em;
 }
 .download {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
   margin-top: 32px;
   padding: 13px 22px;
   min-height: 48px;
@@ -211,6 +213,19 @@ h2 {
 }
 .download:active {
   transform: scale(0.97);
+}
+.download-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.download-content > * {
+  flex: none;
+}
+.download > canvas[data-dw-skip] {
+  opacity: 1;
 }
 .download svg {
   width: 18px;
