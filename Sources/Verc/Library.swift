@@ -338,7 +338,16 @@ actor LibraryStore {
         // A move does not change its source until it completes, so this destination is a partial or extra copy.
         try files.removeItem(at: destination)
       } else {
-        throw CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: source.path])
+        // Another file now uses the original path, so put this one next to it.
+        let name = source.deletingPathExtension().lastPathComponent
+        var target = source
+        var suffix = 2
+        while files.fileExists(atPath: target.path) {
+          target = source.deletingLastPathComponent().appendingPathComponent("\(name) (\(suffix))")
+            .appendingPathExtension(source.pathExtension)
+          suffix += 1
+        }
+        try files.moveItem(at: destination, to: target)
       }
     }
     // A failed import leaves the folders that it made for files that did not arrive.

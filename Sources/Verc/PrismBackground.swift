@@ -50,8 +50,14 @@ private final class PrismMetalView: MTKView {
 
   private var renderer: PrismRenderer? { delegate as? PrismRenderer }
 
+  // Each new drawable size rebuilds about 100 MB of targets, so keep the old size during live resize.
   override func setFrameSize(_ newSize: NSSize) {
     super.setFrameSize(newSize)
+    if inLiveResize { schedule() } else { resizeDrawable() }
+  }
+
+  override func viewDidEndLiveResize() {
+    super.viewDidEndLiveResize()
     resizeDrawable()
   }
 

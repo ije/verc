@@ -193,26 +193,28 @@ struct PlayerCommands: Commands {
       let typing =
         player.showURL || player.showIconPicker || favorites.draft != nil
         || player.pendingPlayback != nil || favorites.showAllMedia && player.current == nil
+      // Arrow keys move the focused subtitle slider in the tracks popover.
+      let sliding = typing || player.popup == .tracks
       Button(player.playLabel) { player.togglePlay() }
         .keyboardShortcut(typing ? nil : KeyboardShortcut(.space, modifiers: []))
       Button("Stop") { player.stop() }.keyboardShortcut(".").disabled(player.current == nil)
       Divider()
       Button("Skip Backward 10 Seconds") { player.seek(by: -10) }
         .keyboardShortcut(
-          typing || player.current == nil ? nil : KeyboardShortcut(.leftArrow, modifiers: [])
+          sliding || player.current == nil ? nil : KeyboardShortcut(.leftArrow, modifiers: [])
         ).disabled(!player.seekable)
       Button("Skip Forward 10 Seconds") { player.seek(by: 10) }
         .keyboardShortcut(
-          typing || player.current == nil ? nil : KeyboardShortcut(.rightArrow, modifiers: [])
+          sliding || player.current == nil ? nil : KeyboardShortcut(.rightArrow, modifiers: [])
         ).disabled(!player.seekable)
       Divider()
       Toggle("Mute", isOn: $player.muted)
         .keyboardShortcut(typing ? nil : KeyboardShortcut("m", modifiers: []))
       Button("Volume Up") { player.volume = min(1, player.volume + 0.05) }
-        .keyboardShortcut(showPlaylist || typing ? nil : KeyboardShortcut(.upArrow, modifiers: []))
+        .keyboardShortcut(showPlaylist || sliding ? nil : KeyboardShortcut(.upArrow, modifiers: []))
       Button("Volume Down") { player.volume = max(0, player.volume - 0.05) }
         .keyboardShortcut(
-          showPlaylist || typing ? nil : KeyboardShortcut(.downArrow, modifiers: []))
+          showPlaylist || sliding ? nil : KeyboardShortcut(.downArrow, modifiers: []))
       Divider()
       Picker("Repeat", selection: $player.repeatMode) {
         ForEach(RepeatMode.allCases, id: \.self) { mode in Text(mode.rawValue).tag(mode) }

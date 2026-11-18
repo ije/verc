@@ -787,6 +787,7 @@ struct FavoriteEditor: View {
   @State private var deleteOriginals = false
   @State private var originalsToDelete: Set<URL> = []
   @State private var pendingFiles: [URL]?
+  @State private var pendingReplacements: [URL: URL]?
   @State private var bodyHeight: CGFloat = 0
   @State private var lookupStatus: [UUID: (message: String, retry: Bool)] = [:]
   @State private var lookupAttempt = 0
@@ -794,13 +795,15 @@ struct FavoriteEditor: View {
   @State private var subtitled: Set<URL> = []
   @FocusState private var focused: UUID?
 
-  var body: some View {
-    let isEditing = pages.count == 1 && favorites.pages.contains { $0.id == pages[0].id }
-    let canSave =
-      favorites.ready && !favorites.saving && !pages.isEmpty
+  private var canSave: Bool {
+    favorites.ready && !favorites.saving && !pages.isEmpty
       && pages.allSatisfy {
         !$0.media.isEmpty && !$0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       } && !loading && !addingFiles
+  }
+
+  var body: some View {
+    let isEditing = pages.count == 1 && favorites.pages.contains { $0.id == pages[0].id }
     let inset: CGFloat = compact ? 12 : 28
     let sections = ForEach($pages) { $page in
       VStack(alignment: .leading, spacing: compact ? 8 : 16) {
@@ -1026,75 +1029,7 @@ struct FavoriteEditor: View {
         }
         Spacer()
         Button("Cancel") { favorites.draft = nil }.keyboardShortcut(.cancelAction)
-        Button(isEditing ? "Save" : "Add to Library") {
-          guard canSave else { return }
-          var saved = favorites.pages
-          var seen = Set(saved.flatMap(\.media).map(\.standardizedFileURL))
-          var added: [UUID] = []
-          for var page in pages {
-            page.title =
-              page.info?.title ?? page.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            page.clearedInfoTitle = page.info == nil ? page.title : nil
-            if let index = saved.firstIndex(where: { $0.id == page.id }) {
-              saved[index] = page
-            } else {
-              page.media.removeAll { !seen.insert($0.standardizedFileURL).inserted }
-              guard !page.media.isEmpty else { continue }
-              if let info = page.info,
-                let index = saved.firstIndex(where: {
-                  $0.info?.id == info.id && $0.info?.mediaType == info.mediaType
-                })
-              {
-                var existing = saved[index]
-                existing.media += page.media
-                existing.media.sort {
-                  $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent)
-                    == .orderedAscending
-                }
-                existing.episodeTitles = (existing.episodeTitles ?? [:]).merging(
-                  page.episodeTitles ?? [:]
-                ) { _, new in new }
-                existing.episodeImages = (existing.episodeImages ?? [:]).merging(
-                  page.episodeImages ?? [:]
-                ) { _, new in new }
-                if let background = page.background { existing.background = background }
-                saved[index] = existing
-                page.id = existing.id
-              } else {
-                saved.append(page)
-              }
-            }
-            if !added.contains(page.id) { added.append(page.id) }
-          }
-          guard let first = added.first else {
-            player.error = "No files were added. All selected files are already in your library."
-            return
-          }
-          let originals = deleteOriginals ? Set(pages.flatMap(\.media)) : originalsToDelete
-          Task {
-            guard await favorites.save(saved, importing: Set(added), moving: originals) else {
-              return
-            }
-            var moved: [URL: URL] = [:]
-            for page in saved {
-              guard let updated = favorites.pages.first(where: { $0.id == page.id }) else {
-                continue
-              }
-              for (source, destination) in zip(page.media, updated.media)
-              where source != destination { moved[source] = destination }
-            }
-            if let current = player.current, moved[current.url] != nil {
-              if originals.contains(current.url) { player.stop() } else { player.saveProgress() }
-            }
-            if !moved.isEmpty {
-              player.saveProgress(
-                relocating: moved, copying: Set(moved.keys).subtracting(originals))
-            }
-            favorites.draft = nil
-            favorites.select(first)
-            if added.count > 1 { favorites.showAllMedia = true }
-          }
-        }
+        Button(isEditing ? "Save" : "Add to Library") { save() }
         .buttonStyle(.glassProminent).keyboardShortcut(.defaultAction)
         .disabled(!canSave)
       }
@@ -1120,6 +1055,22 @@ struct FavoriteEditor: View {
         Text(
           "The library will keep a copy. Delete the selected files from their original locations when you save?"
         )
+      }
+      .alert(
+        pendingReplacements?.count == 1 ? "Replace Library File?" : "Replace Library Files?",
+        isPresented: Binding(
+          get: { pendingReplacements != nil }, set: { if !$0 { pendingReplacements = nil } }),
+        presenting: pendingReplacements
+      ) { replacements in
+        Button("Replace", role: .destructive) { save(replacing: replacements) }
+        Button(replacements.count == 1 ? "Keep Both" : "Keep All") { save(replacing: [:]) }
+        Button("Cancel", role: .cancel) {}
+      } message: { replacements in
+        if replacements.count == 1, let (old, new) = replacements.first {
+          Text("Replace “\(old.lastPathComponent)” with “\(new.lastPathComponent)” in your library?")
+        } else {
+          Text("Replace \(replacements.count) matching files in your library?")
+        }
       }
       .task {
         await Task.yield()
@@ -1223,6 +1174,113 @@ struct FavoriteEditor: View {
           }
         }
       }
+  }
+
+  private func save(replacing confirmed: [URL: URL]? = nil) {
+    guard canSave, favorites.draft?.first?.id == pages.first?.id else { return }
+    let library = favorites.pages
+    var saved = library
+    var seen = Set(library.flatMap(\.media).map(\.standardizedFileURL))
+    var added: [UUID] = []
+    var replacements: [URL: URL] = [:]
+    for var page in pages {
+      page.title = page.info?.title ?? page.title.trimmingCharacters(in: .whitespacesAndNewlines)
+      page.clearedInfoTitle = page.info == nil ? page.title : nil
+      if let index = saved.firstIndex(where: { $0.id == page.id }) {
+        saved[index] = page
+      } else {
+        page.media.removeAll { !seen.insert($0.standardizedFileURL).inserted }
+        guard !page.media.isEmpty else { continue }
+        if let info = page.info,
+          let index = saved.firstIndex(where: {
+            $0.info?.id == info.id && $0.info?.mediaType == info.mediaType
+          })
+        {
+          var existing = saved[index]
+          if confirmed?.isEmpty != true,
+            let original = library.first(where: { $0.id == existing.id })
+          {
+            let matches = original.matchingMedia(for: page.media)
+            for (old, new) in matches where replacements[old] == nil { replacements[old] = new }
+            if confirmed != nil {
+              let oldFiles = Set(matches.map(\.old))
+              existing.media.removeAll { oldFiles.contains($0) }
+            }
+          }
+          existing.media += page.media
+          existing.media.sort {
+            $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+          }
+          existing.episodeTitles = (existing.episodeTitles ?? [:]).merging(
+            page.episodeTitles ?? [:]
+          ) { _, new in new }
+          existing.episodeImages = (existing.episodeImages ?? [:]).merging(
+            page.episodeImages ?? [:]
+          ) { _, new in new }
+          if let background = page.background { existing.background = background }
+          saved[index] = existing
+          page.id = existing.id
+        } else {
+          saved.append(page)
+        }
+      }
+      if !added.contains(page.id) { added.append(page.id) }
+    }
+    if let confirmed {
+      guard confirmed == replacements else {
+        player.error = "The matching library files changed. Review the import and try again."
+        return
+      }
+    } else if !replacements.isEmpty {
+      pendingReplacements = replacements
+      return
+    }
+    guard let first = added.first else {
+      player.error = "No files were added. All selected files are already in your library."
+      return
+    }
+    let originals = deleteOriginals ? Set(pages.flatMap(\.media)) : originalsToDelete
+    Task {
+      guard await favorites.save(saved, importing: Set(added), moving: originals) else { return }
+      var moved: [URL: URL] = [:]
+      for page in saved {
+        guard let updated = favorites.pages.first(where: { $0.id == page.id }) else { continue }
+        for (source, destination) in zip(page.media, updated.media)
+        where source != destination { moved[source] = destination }
+      }
+      if let current = player.current {
+        if replacements[current.url] != nil
+          || (moved[current.url] != nil && originals.contains(current.url))
+        {
+          player.stop()
+        } else if moved[current.url] != nil {
+          player.saveProgress()
+        }
+      }
+      if !moved.isEmpty {
+        player.saveProgress(relocating: moved, copying: Set(moved.keys).subtracting(originals))
+      }
+      let latest = replacements.reduce(into: [URL: URL]()) { latest, pair in
+        let (old, source) = pair
+        guard let progress = player.progress[old] else { return }
+        let destination = moved[source] ?? source
+        // The new file can have newer progress than every replaced file.
+        let previous =
+          latest[destination].flatMap { player.progress[$0] } ?? player.progress[destination]
+        if previous == nil || (progress.date ?? .distantPast) > (previous?.date ?? .distantPast) {
+          latest[destination] = old
+        }
+      }
+      if !latest.isEmpty {
+        player.saveProgress(
+          relocating: Dictionary(uniqueKeysWithValues: latest.map { destination, old in
+            (old, destination)
+          }))
+      }
+      favorites.draft = nil
+      favorites.select(first)
+      if added.count > 1 { favorites.showAllMedia = true }
+    }
   }
 }
 

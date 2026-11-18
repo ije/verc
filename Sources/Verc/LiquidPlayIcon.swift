@@ -3,11 +3,14 @@ import SwiftUI
 struct LiquidPlayIcon: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.scenePhase) private var scenePhase
+  @Environment(\.controlActiveState) private var activeState
   @State private var started = Date()
 
   var body: some View {
     TimelineView(
-      .animation(minimumInterval: 1.0 / 30, paused: reduceMotion || scenePhase != .active)
+      .animation(
+        minimumInterval: 1.0 / 30,
+        paused: reduceMotion || scenePhase != .active || activeState == .inactive)
     ) { context in
       let time = reduceMotion ? 0 : Float(context.date.timeIntervalSince(started)) * 0.9
       let mesh = MeshGradient(

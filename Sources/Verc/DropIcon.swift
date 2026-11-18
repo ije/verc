@@ -64,7 +64,8 @@ struct DropIcon: View {
       .task(id: reduceMotion) {
         withAnimation(.linear(duration: 0)) {
           circleOffset = reduceMotion ? 0 : 32
-          dashOffset = reduceMotion ? 0 : 6
+          // Keep 6 in both cases: the repeating animation ends at 0, and a no-op write does not stop it.
+          dashOffset = 6
           rotation = reduceMotion ? 0 : -180
           showDashes = reduceMotion
           stemOffset = reduceMotion ? 0 : 10

@@ -8,14 +8,15 @@ struct ContentView: View {
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var dropTargeted = false
+  @State private var resolvingDrop = false
   @State private var droppedURLs: [URL]?
+  @State private var mediaReplacement: (source: URL, page: FavoritePage, previous: [URL])?
   @State private var controlsVisible = true
   @State private var canvasHovered = false
   @State private var chromeHovered = false
   @State private var hideTask: Task<Void, Never>?
   @State private var trackedMenus: Set<ObjectIdentifier> = []
   @State private var scrubbing = false
-  @State private var popup: PlayerPopup?
   @State private var playlistSelection: UUID?
   @FocusState private var playlistFocused: Bool
   @FocusState private var playbackPromptFocused: Bool
@@ -65,7 +66,7 @@ struct ContentView: View {
         StartPage(player: player, favorites: favorites)
           .id(favorites.url)
           .disabled(!favorites.ready)
-          .allowsHitTesting(popup == nil)
+          .allowsHitTesting(player.popup == nil)
       } else {
         stage
         VStack {
@@ -106,7 +107,7 @@ struct ContentView: View {
         .help(label)
         .accessibilityLabel(label)
         .modifier(PlaylistMotion(distance: playlistVisible ? 296 : 0))
-        .allowsHitTesting(popup == nil)
+        .allowsHitTesting(player.popup == nil)
       }
       SeekFeedback(player: player)
         .modifier(PlaylistMotion(distance: playlistVisible ? 296 : 0))
@@ -149,7 +150,7 @@ struct ContentView: View {
         player.stop()
       }
       .onChange(of: player.current?.id) {
-        popup = nil
+        player.popup = nil
         revealControls()
         if let url = player.current?.url,
           let index = favorites.pages.firstIndex(where: { $0.media.contains(url) }), index > 0
@@ -157,12 +158,12 @@ struct ContentView: View {
           favorites.pages.move(fromOffsets: IndexSet(integer: index), toOffset: 0)
         }
       }
-      .onChange(of: popup) { revealControls() }
-      .onChange(of: scenePhase) { if scenePhase != .active && popup != .credits { popup = nil } }
+      .onChange(of: player.popup) { revealControls() }
+      .onChange(of: scenePhase) { if scenePhase != .active && player.popup != .credits { player.popup = nil } }
       .onChange(of: player.showURL) { revealControls() }
       .onChange(of: player.showInfo) { revealControls() }
       .onChange(of: player.showIconPicker) {
-        popup = nil
+        player.popup = nil
         revealControls()
       }
       .onChange(of: player.pendingPlayback != nil) { revealControls() }
@@ -191,7 +192,7 @@ struct ContentView: View {
       .overlay {
         if dropTargeted {
           Group {
-            if player.current == nil {
+            if player.current == nil && !favorites.showAllMedia && favorites.selection == nil {
               RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(
                   .primary.opacity(0.48), style: StrokeStyle(lineWidth: 2, dash: [8, 5])
@@ -205,26 +206,74 @@ struct ContentView: View {
               }
               .font(.title2.weight(.medium)).foregroundStyle(.white).padding(24)
               .glassEffect(
-                .regular.tint(.black.opacity(0.35)), in: RoundedRectangle(cornerRadius: 12))
+                player.current == nil ? .regular : .clear, in: RoundedRectangle(cornerRadius: 12))
             }
           }
           .allowsHitTesting(false)
         }
       }
       .dropDestination(for: URL.self) { urls, _ in
-        guard !urls.isEmpty else { return false }
+        guard !urls.isEmpty, !modal, !resolvingDrop, droppedURLs == nil, mediaReplacement == nil
+        else { return false }
         if favorites.open(urls, player: player) { return true }
+        let inLibrary = player.current == nil && favorites.showAllMedia
+        let target = player.current == nil && !inLibrary ? favorites.selectedPage?.id : nil
+        resolvingDrop = true
         Task {
-          let offerPlaylist = await Task.detached(priority: .userInitiated) { () -> Bool in
+          defer { resolvingDrop = false }
+          let (video, offerLibrary) = await Task.detached(priority: .userInitiated) {
+            () -> (URL?, Bool) in
             let files = urls.filter {
               $0.isFileURL && !MediaItem.subtitleExtensions.contains($0.pathExtension.lowercased())
             }
-            return files.count > 1
-              || files.contains {
-                (try? $0.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
-              }
+            guard let file = files.first else { return (nil, false) }
+            if files.count > 1 { return (nil, true) }
+            let source = file.resolvingSymlinksInPath()
+            if (try? source.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+              return (nil, true)
+            }
+            guard MediaItem.isMediaFile(source, images: true) else { return (nil, false) }
+            return (MediaItem(url: source).isVideo ? source : nil, inLibrary)
           }.value
-          if offerPlaylist { droppedURLs = urls } else { player.add(urls) }
+          guard !modal else { return }
+          if let video {
+            let name = MediaFilename(video.deletingPathExtension().lastPathComponent)
+            let show = name.episodeKey == nil ? nil : favorites.pages.first {
+              $0.id == target && $0.info?.mediaType == .tv
+            }
+            var page = show
+            if page == nil && !name.title.isEmpty {
+              let type: TMDBTitle.MediaType = name.episodeKey == nil ? .movie : .tv
+              let matches = favorites.pages.filter {
+                guard let info = $0.info, info.mediaType == type else { return false }
+                return info.title.compare(
+                  name.title, options: [.caseInsensitive, .diacriticInsensitive]
+                ) == .orderedSame
+                  && (name.year.map { info.releaseDate?.hasPrefix(String($0)) == true } ?? true)
+              }
+              page = matches.first { $0.id == target } ?? (matches.count == 1 ? matches.first : nil)
+            }
+            if let page {
+              let previous = page.matchingMedia(for: [video]).map(\.old)
+              if page.media.contains(video) {
+                player.add(urls)
+                return
+              }
+              if !previous.isEmpty {
+                mediaReplacement = (video, page, previous)
+                return
+              }
+              if show != nil {
+                await favorites.importMedia(video, into: page, matching: [], player: player)
+                return
+              }
+            }
+          }
+          if offerLibrary {
+            droppedURLs = urls
+          } else {
+            player.add(urls)
+          }
         }
         return true
       } isTargeted: {
@@ -321,10 +370,41 @@ struct ContentView: View {
         presenting: droppedURLs
       ) { urls in
         Button("Add to Library…") { favorites.prepareDraft(urls, player: player) }
+          .disabled(!favorites.ready || favorites.saving)
         Button("Open Now") { player.add(urls) }
         Button("Cancel", role: .cancel) {}
       } message: { _ in
-        Text("Add these media files to your library, or open them now.")
+        Text("Add the dropped media to your library or open it now.")
+      }
+      .alert(
+        mediaReplacement?.page.info?.mediaType == .tv ? "Replace Episode?" : "Replace Movie File?",
+        isPresented: Binding(
+          get: { mediaReplacement != nil }, set: { if !$0 { mediaReplacement = nil } }),
+        presenting: mediaReplacement
+      ) { request in
+        Button("Replace", role: .destructive) {
+          Task {
+            await favorites.importMedia(
+              request.source, into: request.page, matching: request.previous, player: player)
+          }
+        }
+        Button(request.previous.count == 1 ? "Keep Both" : "Keep All") {
+          Task {
+            await favorites.importMedia(
+              request.source, into: request.page, matching: request.previous,
+              keepingExisting: true, player: player)
+          }
+        }
+        Button("Open Now") { player.add([request.source]) }
+        Button("Cancel", role: .cancel) {}
+      } message: { request in
+        if request.previous.count == 1, let old = request.previous.first {
+          Text("Replace “\(old.lastPathComponent)” with “\(request.source.lastPathComponent)” in your library?")
+        } else {
+          Text(
+            "Replace \(request.previous.count) files for “\(request.page.title)” with “\(request.source.lastPathComponent)”?"
+          )
+        }
       }
       .alert(
         "Remove from Library?",
@@ -347,7 +427,7 @@ struct ContentView: View {
   private func revealControls() {
     hideTask?.cancel()
     controlsVisible = true
-    guard player.isPlaying, !chromeHovered, !scrubbing, popup == nil, !showPlaylist,
+    guard player.isPlaying, !chromeHovered, !scrubbing, player.popup == nil, !showPlaylist,
       trackedMenus.isEmpty, !modal
     else { return }
     hideTask = Task {
@@ -387,15 +467,15 @@ struct ContentView: View {
         .padding(.trailing, 7)
       } else if player.current == nil && !favorites.showAllMedia && favorites.selection == nil {
         GlassIconButton(symbol: "info", label: "Credits", help: "Credits · ⌘I", size: 18) {
-          popup = popup == .credits ? nil : .credits
+          player.popup = player.popup == .credits ? nil : .credits
         }
         .keyboardShortcut("i")
         .background {
           CreditsPopover(
             isPresented: Binding(
-              get: { popup == .credits },
+              get: { player.popup == .credits },
               set: {
-                if $0 { popup = .credits } else if popup == .credits { popup = nil }
+                if $0 { player.popup = .credits } else if player.popup == .credits { player.popup = nil }
               }), content: creditsPopover.preferredColorScheme(.dark).fixedSize())
         }
         .padding(.trailing, 7)
@@ -403,7 +483,7 @@ struct ContentView: View {
     }
     .onChange(of: player.playlist.count) { if player.playlist.count < 2 { showPlaylist = false } }
     .onChange(of: showPlaylist) {
-      if showPlaylist { popup = nil }
+      if showPlaylist { player.popup = nil }
       revealControls()
     }
     .onHover {
@@ -592,13 +672,13 @@ struct ContentView: View {
       }
     }
     .gesture(WindowDragGesture())
-    .allowsHitTesting(popup == nil)
+    .allowsHitTesting(player.popup == nil)
   }
 
   private var transport: some View {
     HStack(spacing: 12) {
       Button {
-        popup = popup == .volume ? nil : .volume
+        player.popup = player.popup == .volume ? nil : .volume
       } label: {
         Image(
           systemName: player.muted || player.volume == 0
@@ -609,15 +689,15 @@ struct ContentView: View {
       .accessibilityLabel("Volume")
       .popover(
         isPresented: Binding(
-          get: { popup == .volume },
+          get: { player.popup == .volume },
           set: {
-            if $0 { popup = .volume } else if popup == .volume { popup = nil }
+            if $0 { player.popup = .volume } else if player.popup == .volume { player.popup = nil }
           }), arrowEdge: .top
       ) {
         volumePopover.preferredColorScheme(.dark).fixedSize()
       }
       Button {
-        popup = popup == .tracks ? nil : .tracks
+        player.popup = player.popup == .tracks ? nil : .tracks
       } label: {
         Image(systemName: "captions.bubble").font(.system(size: 16)).frame(width: 28, height: 32)
           .foregroundStyle(player.subtitleID == -1 ? .gray : .white.opacity(0.9))
@@ -627,9 +707,9 @@ struct ContentView: View {
       )
       .popover(
         isPresented: Binding(
-          get: { popup == .tracks },
+          get: { player.popup == .tracks },
           set: {
-            if $0 { popup = .tracks } else if popup == .tracks { popup = nil }
+            if $0 { player.popup = .tracks } else if player.popup == .tracks { player.popup = nil }
           }), arrowEdge: .top
       ) {
         tracksPopover.preferredColorScheme(.dark).fixedSize()
@@ -704,7 +784,7 @@ struct ContentView: View {
         Text("Subtitles").font(.system(size: 11)).foregroundStyle(.secondary)
         Spacer(minLength: 0)
         GlassIconButton(symbol: "plus", label: "Add Subtitles", help: "Add Subtitles…") {
-          popup = nil
+          player.popup = nil
           player.openFiles(subtitles: true)
         }
       }
@@ -882,8 +962,6 @@ private struct Timeline: View {
     }
   }
 }
-
-private enum PlayerPopup { case volume, tracks, credits }
 
 private struct CreditsPopover<Content: View>: NSViewRepresentable {
   @Binding var isPresented: Bool

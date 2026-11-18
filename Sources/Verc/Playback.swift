@@ -169,6 +169,8 @@ enum RepeatMode: String, CaseIterable {
 }
 
 // Raw values match libvlc_state_t. libVLC does not report failed for every failure, so the VLC wrapper sets it.
+enum PlayerPopup { case volume, tracks, credits }
+
 enum PlaybackState: Int32, Sendable {
   case idle, opening, buffering, playing, paused, stopped, ended, failed
 }
@@ -417,6 +419,8 @@ final class VLC: @unchecked Sendable {
       return URL(string: String(cString: uri))
     }
     if let slaves { vc_free_media_slaves(handle, slaves, count) }
+    // VLC also attaches the subtitles it finds next to the media, which the EOF check below needs to know.
+    if !files.isEmpty { externalSubtitles = true }
     if subtitleFiles != files {
       subtitleFiles = files
       let id = mediaID
@@ -500,23 +504,27 @@ final class VLC: @unchecked Sendable {
         }
         let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(
           UUID().uuidString + ".png")
-        defer { try? FileManager.default.removeItem(at: temporary) }
-        do {
-          // VLC can return success even when encoding or writing the snapshot fails.
-          guard vc_snapshot(handle, temporary.path) == 0,
-            let image = thumbnail(
-              CGImageSourceCreateWithURL(temporary as CFURL, nil), maxPixelSize: 480)
-          else {
-            throw NSError(
-              domain: "Verc", code: 2,
-              userInfo: [
-                NSLocalizedDescriptionKey:
-                  "The current video frame could not be captured. Try again when the video is ready."
-              ])
-          }
-          try FileManager.default.moveItem(at: temporary, to: url)
-          continuation.resume(returning: image)
-        } catch { continuation.resume(throwing: error) }
+        let captured = vc_snapshot(handle, temporary.path) == 0
+        // Decode and move off the playback queue, so commands and updates do not wait.
+        DispatchQueue.global(qos: .utility).async {
+          defer { try? FileManager.default.removeItem(at: temporary) }
+          do {
+            // VLC can return success even when encoding or writing the snapshot fails.
+            guard captured,
+              let image = thumbnail(
+                CGImageSourceCreateWithURL(temporary as CFURL, nil), maxPixelSize: 480)
+            else {
+              throw NSError(
+                domain: "Verc", code: 2,
+                userInfo: [
+                  NSLocalizedDescriptionKey:
+                    "The current video frame could not be captured. Try again when the video is ready."
+                ])
+            }
+            try FileManager.default.moveItem(at: temporary, to: url)
+            continuation.resume(returning: image)
+          } catch { continuation.resume(throwing: error) }
+        }
       }
     }
   }
@@ -708,8 +716,11 @@ final class VLC: @unchecked Sendable {
     didSet { if isFullScreen != oldValue { fillVideo = !isFullScreen } }
   }
   var viewport = CGSize.zero { didSet { updateCrop() } }
-  var showURL = false
+  var showURL = false {
+    didSet { if showURL { endPictureInPicture() } }
+  }
   var showIconPicker = false
+  var popup: PlayerPopup?
   var showInfo = false {
     didSet { if showInfo { endPictureInPicture() } }
   }
@@ -853,7 +864,8 @@ final class VLC: @unchecked Sendable {
         playlist[index].duration = snapshot.duration
       }
     }
-    seekable = resume == nil && snapshot.seekable
+    // VLC ignores seeks after the input ends, but it still reports the media as seekable.
+    seekable = resume == nil && snapshot.seekable && state != .ended && state != .failed
     videoWidth = snapshot.width
     videoHeight = snapshot.height
     if videoRatio != snapshot.ratio {

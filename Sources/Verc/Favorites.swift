@@ -1,5 +1,6 @@
 import AppKit
 import Observation
+import Synchronization
 
 struct FavoritePage: Identifiable, Sendable {
   var id = UUID()
@@ -38,6 +39,9 @@ struct FavoritePage: Identifiable, Sendable {
   var lookupKey: [String] { [title] + media.map(\.absoluteString) }
   var displayTitle: String { title + seasonSuffix }
 
+  // TMDB seasons by "show:season", so episodes that TMDB does not list are not requested again in this session.
+  private static let seasons = Mutex<[String: [TMDB.Episode]]>([:])
+
   var missingSeasons: [Int] {
     guard info?.mediaType == .tv else { return [] }
     return Set(
@@ -68,6 +72,25 @@ struct FavoritePage: Identifiable, Sendable {
       return episodeTitles?[key] ?? item.title
     }
     return media.count == 1 ? info.title : item.title
+  }
+
+  func matchingMedia(for sources: [URL]) -> [(old: URL, new: URL)] {
+    guard let type = info?.mediaType else { return [] }
+    // A movie with several videos holds parts or extras, so a new video replaces none of them.
+    let single = type == .movie && media.count(where: { MediaItem(url: $0).isVideo }) == 1
+    let matchKey = { (url: URL) -> String? in
+      guard MediaItem(url: url).isVideo else { return nil }
+      if type == .movie { return single ? "" : nil }
+      return MediaFilename(url.deletingPathExtension().lastPathComponent).episodeKey
+    }
+    var incoming: [String: URL] = [:]
+    for url in sources {
+      if let key = matchKey(url), incoming[key] == nil { incoming[key] = url }
+    }
+    return media.compactMap { old in
+      guard let key = matchKey(old), let new = incoming[key] else { return nil }
+      return (old, new)
+    }
   }
 
   func artwork(for url: URL) -> URL? {
@@ -135,17 +158,27 @@ struct FavoritePage: Identifiable, Sendable {
 
   mutating func loadEpisodes() async throws -> Bool {
     guard let info, info.mediaType == .tv else { return true }
-    let seasons = missingSeasons
-    let responses = await withTaskGroup(of: TMDB.Response?.self) { group in
-      for season in seasons {
-        group.addTask { try? await TMDB.load(.init(type: "tv", id: info.id, season: season)) }
+    let responses = await withTaskGroup(of: [TMDB.Episode]?.self) { group in
+      for season in missingSeasons {
+        group.addTask {
+          let key = "\(info.id):\(season)"
+          if let cached = Self.seasons.withLock({ $0[key] }) { return cached }
+          let episodes: [TMDB.Episode]
+          do {
+            episodes = try await TMDB.load(.init(type: "tv", id: info.id, season: season)).episodes ?? []
+          } catch URLError.fileDoesNotExist {
+            episodes = []
+          } catch { return nil }
+          Self.seasons.withLock { $0[key] = episodes }
+          return episodes
+        }
       }
-      return await group.reduce(into: [TMDB.Response?]()) { $0.append($1) }
+      return await group.reduce(into: [[TMDB.Episode]?]()) { $0.append($1) }
     }
     try Task.checkCancellation()
     var titles = episodeTitles ?? [:]
     var images = episodeImages ?? [:]
-    for episode in responses.flatMap({ $0?.episodes ?? [] }) {
+    for episode in responses.flatMap({ $0 ?? [] }) {
       let key = MediaFilename.episodeKey(episode.season, episode.episode)
       titles[key] = episode.title
       images[key] = episode.stillURL
@@ -243,13 +276,15 @@ struct FavoritePage: Identifiable, Sendable {
     }
   }
 
-  func save(_ pages: [FavoritePage], importing ids: Set<UUID>, moving: Set<URL> = []) async -> Bool
-  {
+  func save(
+    _ pages: [FavoritePage], importing ids: Set<UUID>, moving: Set<URL> = [],
+    refreshingEpisodesFor showID: UUID? = nil
+  ) async -> Bool {
     guard ready, !saving, let store else { return false }
     saving = true
     defer {
       saving = false
-      cacheArtwork()
+      cacheArtwork(refreshingEpisodesFor: showID)
     }
     artworkTask?.cancel()
     let previous = persistence
@@ -270,7 +305,7 @@ struct FavoritePage: Identifiable, Sendable {
     return await task.value
   }
 
-  private func cacheArtwork() {
+  private func cacheArtwork(refreshingEpisodesFor showID: UUID? = nil) {
     guard ready, !saving, let store else { return }
     artworkTask?.cancel()
     let snapshot = pages
@@ -278,6 +313,11 @@ struct FavoritePage: Identifiable, Sendable {
       var changed = false
       for var page in snapshot {
         guard !Task.isCancelled else { return }
+        let refreshEpisodes = page.id == showID && !page.missingSeasons.isEmpty
+        if refreshEpisodes {
+          _ = try? await page.loadEpisodes()
+          guard !Task.isCancelled else { return }
+        }
         if let info = page.info, info.backgroundURLs == nil,
           !failedLookups.contains("\(info.url)")
         {
@@ -299,11 +339,17 @@ struct FavoritePage: Identifiable, Sendable {
           ),
           pages[index].info?.backgroundURLs != page.info?.backgroundURLs
             || pages[index].info?.credits != page.info?.credits
+            || refreshEpisodes && (pages[index].episodeTitles != page.episodeTitles
+              || pages[index].episodeImages != page.episodeImages)
             || pages[index].cachedArtwork != cached
         else { continue }
         applying = true
         pages[index].info?.backgroundURLs = page.info?.backgroundURLs
         pages[index].info?.credits = page.info?.credits
+        if refreshEpisodes {
+          pages[index].episodeTitles = page.episodeTitles
+          pages[index].episodeImages = page.episodeImages
+        }
         pages[index].cachedArtwork = cached
         applying = false
         changed = true
@@ -360,6 +406,59 @@ struct FavoritePage: Identifiable, Sendable {
     } else if next == -1, let info = page.info {
       previewSelection = info.url
     }
+  }
+
+  func importMedia(
+    _ source: URL, into item: FavoritePage, matching previous: [URL],
+    keepingExisting: Bool = false, player: PlayerModel
+  ) async {
+    guard ready, !saving else {
+      error = "The library is busy. Drop the file again when it is ready."
+      return
+    }
+    let copied = await copiedSources()
+    guard let index = pages.firstIndex(where: { $0.id == item.id }),
+      let info = item.info, pages[index].libraryURL == item.libraryURL,
+      pages[index].info?.id == info.id, pages[index].info?.mediaType == info.mediaType,
+      pages[index].matchingMedia(for: [source]).map(\.old) == previous
+    else {
+      error = "The library item changed. Drop the file again to add it."
+      return
+    }
+    guard !copied.contains(source.standardizedFileURL),
+      !pages.contains(where: { $0.media.contains(source) })
+    else {
+      error = "This file is already in your library."
+      return
+    }
+    var updated = pages
+    if !keepingExisting { updated[index].media.removeAll { previous.contains($0) } }
+    updated[index].media.append(source)
+    updated[index].media.sort {
+      $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+    }
+    guard let offset = updated[index].media.firstIndex(of: source),
+      await save(
+        updated, importing: [item.id], refreshingEpisodesFor: info.mediaType == .tv ? item.id : nil),
+      let page = pages.first(where: { $0.id == item.id }), page.media.indices.contains(offset)
+    else { return }
+    let destination = page.media[offset]
+    if !keepingExisting, let current = player.current, previous.contains(current.url) {
+      player.stop()
+    } else {
+      player.saveProgress()
+    }
+    let date = { (url: URL) in player.progress[url]?.date ?? .distantPast }
+    if !keepingExisting,
+      let old = previous.filter({ player.progress[$0] != nil }).max(by: { date($0) < date($1) }),
+      old != destination, player.progress[source] == nil || date(old) > date(source)
+    {
+      player.saveProgress(relocating: [old: destination])
+    } else if source != destination, player.progress[source] != nil {
+      player.saveProgress(relocating: [source: destination], copying: [source])
+    }
+    select(page.id)
+    player.add(page.media, startingAt: destination, page: page)
   }
 
   func prepareDraft(_ urls: [URL], player: PlayerModel) {

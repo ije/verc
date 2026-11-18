@@ -12,6 +12,7 @@ struct MediaFilename: Sendable {
   private static let episodePattern = try! NSRegularExpression(
     pattern: #"(?i)(?:^|[ ._\-\[(])S(\d{1,3})[ ._-]*E(\d{1,4})(?!\d)"#)
   private static let yearPattern = try! NSRegularExpression(pattern: #"\b(?:19|20)\d{2}\b"#)
+  private static let maxYear = Calendar.current.component(.year, from: .now) + 1
   // Views parse filenames on every render, and each parse runs several regular expressions.
   private static let cache = Mutex<[String: MediaFilename]>([:])
 
@@ -42,7 +43,8 @@ struct MediaFilename: Sendable {
       in: title, range: NSRange(title.startIndex..., in: title)
     ).compactMap({ Range($0.range, in: title) })
       .last(where: {
-        !title[..<$0.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        Int(title[$0])! <= Self.maxYear
+          && !title[..<$0.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       })
     {
       year = Int(title[range])
@@ -101,7 +103,7 @@ enum TMDB {
     var credits: [TMDBTitle.Credit]?
   }
 
-  struct Episode: Decodable {
+  struct Episode: Decodable, Sendable {
     let season: Int
     let episode: Int
     let title: String
@@ -115,9 +117,8 @@ enum TMDB {
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.httpBody = try JSONEncoder().encode(body)
     let (data, response) = try await URLSession.shared.data(for: request)
-    guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-      throw URLError(.badServerResponse)
-    }
+    let status = (response as? HTTPURLResponse)?.statusCode
+    guard status == 200 else { throw URLError(status == 404 ? .fileDoesNotExist : .badServerResponse) }
     return try JSONDecoder().decode(Response.self, from: data)
   }
 }
