@@ -6,7 +6,44 @@ const headers = {
 };
 const images = "https://image.tmdb.org/t/p/";
 
-function error(message, status, extraHeaders) {
+type TMDBJob = { job?: string; episode_count?: number };
+type TMDBPerson = {
+  name?: string;
+  job?: string;
+  jobs?: TMDBJob[];
+  total_episode_count?: number;
+};
+type TMDBCredits = {
+  cast?: (TMDBPerson | null)[];
+  crew?: (TMDBPerson | null)[];
+};
+type TMDBResponse = TMDBCredits & {
+  aggregate_credits?: TMDBCredits;
+  backdrops?: ({ file_path?: string } | null)[];
+  episodes?: ({
+    season_number?: number;
+    episode_number?: number;
+    name?: string;
+    still_path?: string | null;
+  } | null)[];
+  results?: ({
+    id: number;
+    media_type?: string;
+    title?: string;
+    name?: string;
+    overview?: string;
+    release_date?: string;
+    first_air_date?: string;
+    poster_path?: string | null;
+    backdrop_path?: string | null;
+  } | null)[];
+};
+
+function error(
+  message: string,
+  status: number,
+  extraHeaders?: Record<string, string>,
+) {
   return Response.json(
     { error: message },
     { status, headers: { ...headers, ...extraHeaders } },
@@ -14,7 +51,11 @@ function error(message, status, extraHeaders) {
 }
 
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(
+    request: Request,
+    env: { TMDB_API_READ_ACCESS_TOKEN?: string },
+    ctx: ExecutionContext,
+  ) {
     const url = new URL(request.url);
     if (url.pathname === "/verc.dmg")
       return Response.redirect(
@@ -30,13 +71,13 @@ export default {
       request.headers
         .get("Content-Type")
         ?.split(";")[0]
-        .trim()
+        ?.trim()
         .toLowerCase() !== "application/json"
     ) {
       return error("Send an application/json body.", 415);
     }
 
-    let body;
+    let body: unknown;
     try {
       let size = 0;
       const chunks = [];
@@ -52,33 +93,30 @@ export default {
     if (!body || typeof body !== "object" || Array.isArray(body))
       return error("Send a JSON object.", 400);
     const {
-      query,
+      query: rawQuery,
       type = "multi",
       language = "en-US",
       id,
       season,
       credits = false,
-    } = body;
+    } = body as Record<string, unknown>;
+    const query = typeof rawQuery === "string" ? rawQuery : "";
     if (typeof credits !== "boolean")
       return error("credits must be a boolean.", 400);
     const imageLookup = id !== undefined && season === undefined && !credits;
     const episodeLookup = season !== undefined;
+    const titleType = type === "movie" || type === "tv";
+    const validID = typeof id === "number" && Number.isSafeInteger(id) && id > 0;
     if (
       credits &&
-      (!["movie", "tv"].includes(type) ||
-        !Number.isSafeInteger(id) ||
-        id < 1 ||
-        episodeLookup)
+      (!titleType || !validID || episodeLookup)
     ) {
       return error(
         "Credit lookup requires type movie or tv, a positive id, and no season.",
         400,
       );
     }
-    if (
-      imageLookup &&
-      (!["movie", "tv"].includes(type) || !Number.isSafeInteger(id) || id < 1)
-    ) {
+    if (imageLookup && (!titleType || !validID)) {
       return error(
         "Backdrop lookup requires type movie or tv and a positive id.",
         400,
@@ -87,8 +125,8 @@ export default {
     if (
       episodeLookup &&
       (type !== "tv" ||
-        !Number.isSafeInteger(id) ||
-        id < 1 ||
+        !validID ||
+        typeof season !== "number" ||
         !Number.isInteger(season) ||
         season < 0 ||
         season > 1000)
@@ -102,11 +140,11 @@ export default {
       !imageLookup &&
       !episodeLookup &&
       !credits &&
-      (typeof query !== "string" || !query.trim() || query.length > 200)
+      (!query.trim() || query.length > 200)
     ) {
       return error("query must contain 1 to 200 characters.", 400);
     }
-    if (!["multi", "movie", "tv"].includes(type))
+    if (type !== "multi" && !titleType)
       return error("type must be multi, movie, or tv.", 400);
     if (
       typeof language !== "string" ||
@@ -133,16 +171,16 @@ export default {
           : episodeLookup
             ? { language }
             : { query: query.trim(), language, include_adult: "false" },
-    );
+    ).toString();
     url.search = search.searchParams.toString();
     url.searchParams.set("type", type);
     if (imageLookup || episodeLookup) {
-      url.searchParams.set("id", id);
-      if (episodeLookup) url.searchParams.set("season", season);
+      url.searchParams.set("id", String(id));
+      if (episodeLookup) url.searchParams.set("season", String(season));
       url.searchParams.set("images", "1");
     }
     if (credits) {
-      url.searchParams.set("id", id);
+      url.searchParams.set("id", String(id));
       url.searchParams.set("credits", "1");
     }
     const cacheKey = new Request(url);
@@ -166,25 +204,28 @@ export default {
         );
       }
       if (!upstream.ok) return error("TMDB search is unavailable.", 502);
-      const data = await upstream.json();
+      const data = await upstream.json<TMDBResponse | null>();
       let payload;
       if (credits) {
         const people = type === "tv" ? data?.aggregate_credits : data;
         if (!Array.isArray(people?.crew) || !Array.isArray(people?.cast))
           return error("Invalid TMDB response.", 502);
         const groups = [];
-        for (const [role, jobs] of [
+        const roles: [string, string[]][] = [
           ["Director", ["Director"]],
           ["Writer", ["Writer", "Screenplay", "Teleplay", "Story"]],
           ["Cast", []],
-        ]) {
+        ];
+        for (const [role, jobs] of roles) {
           const ranked = (role === "Cast" ? people.cast : people.crew)
             .flatMap((person) => {
               if (typeof person?.name !== "string" || !person.name.trim())
                 return [];
-              const matches = (
-                type === "tv" ? (person.jobs ?? []) : [{ job: person.job }]
-              ).filter((job) => jobs.includes(job.job));
+              const personJobs: TMDBJob[] =
+                type === "tv" ? (person.jobs ?? []) : [{ job: person.job ?? "" }];
+              const matches = personJobs.filter(
+                (job) => typeof job.job === "string" && jobs.includes(job.job),
+              );
               if (jobs.length && !matches.length) return [];
               return [
                 {
@@ -208,12 +249,9 @@ export default {
         }
         payload = { credits: groups };
       } else {
-        const list =
-          data?.[
-            imageLookup ? "backdrops" : episodeLookup ? "episodes" : "results"
-          ];
-        if (!Array.isArray(list)) return error("Invalid TMDB response.", 502);
         if (imageLookup) {
+          const list = data?.backdrops;
+          if (!Array.isArray(list)) return error("Invalid TMDB response.", 502);
           const paths = list
             .map((item) => item?.file_path)
             .filter((path) => typeof path === "string" && path.startsWith("/"));
@@ -223,9 +261,12 @@ export default {
             ),
           };
         } else if (episodeLookup) {
+          const list = data?.episodes;
+          if (!Array.isArray(list)) return error("Invalid TMDB response.", 502);
           payload = {
             episodes: list.flatMap((item) =>
-              Number.isInteger(item?.season_number) &&
+              item &&
+              Number.isInteger(item.season_number) &&
               Number.isInteger(item.episode_number)
                 ? [
                     {
@@ -241,9 +282,12 @@ export default {
             ),
           };
         } else {
+          const list = data?.results;
+          if (!Array.isArray(list)) return error("Invalid TMDB response.", 502);
           const results = list.flatMap((item) => {
             const mediaType = type === "multi" ? item?.media_type : type;
-            if (!item || !["movie", "tv"].includes(mediaType)) return [];
+            if (!item || (mediaType !== "movie" && mediaType !== "tv"))
+              return [];
             return [
               {
                 id: item.id,
@@ -272,7 +316,7 @@ export default {
     } catch (cause) {
       return error(
         "TMDB search is unavailable.",
-        cause.name === "TimeoutError" ? 504 : 502,
+        cause instanceof Error && cause.name === "TimeoutError" ? 504 : 502,
       );
     }
   },
