@@ -4,13 +4,31 @@
 
 Less is more. Keep code concise and changes focused. Performance matters.
 
+## Important rules
+
 - Keep one-use logic inline. Extract helpers only for shared logic.
 - Add comments only to warn about constraints or unexpected behavior.
 - Use direct, plain language in documentation and comments.
 - No computer use calls for UI debuger, ask/guide the user to test the UI updates.
 - Do not add automated tests, test dependencies, or test configuration.
+- Preserve third-party notices. Refer to `NOTICE` for distribution requirements.
+- Do not update readme unless the user ask for.
 
-## Project
+## Code constraints
+
+- Use Liquid Glass effect for UI components/windows.
+- Follow the existing four-space indentation and compact Swift and C style.
+- Keep shared playback state in the `@MainActor @Observable` `PlayerModel`.
+- Send playback commands through the serial VLC queue. Keep libVLC startup and metadata work off the main thread.
+- Preserve media IDs in snapshots to reject updates from previous media.
+- Wait for metadata work before you destroy the VLC handle.
+- Reuse `PlayerModel.videoView` between the main window and Picture in Picture.
+- Keep the C bridge compatible with the bundled VLC runtime. Do not unload VLC libraries after successful initialization.
+- Keep `Vendor/VLC/include/` consistent with the VLC version in the build script.
+- Load app resources from `Bundle.main`, and copy them into `Contents/Resources` in the build script. Do not use SwiftPM resources or `Bundle.module`.
+- Reuse GPU resources. Preserve animation suspension for hidden or inactive windows and support for Reduce Motion.
+
+## Player Code
 
 Verc is a media player for Apple silicon and macOS 26+. It uses Swift 6, SwiftUI, AppKit, Metal, and libVLC.
 
@@ -26,24 +44,7 @@ Verc is a media player for Apple silicon and macOS 26+. It uses Swift 6, SwiftUI
 - `Sources/Verc/PrismBackground.swift`, `PrismScene.swift`, and `Prism.metal`: Metal renderer, scene geometry, and shaders.
 - `Sources/VLC/`: C bridge, subtitle plugin, and snapshot plugin. Public headers are in `include/`.
 
-## Code constraints
-
-- Follow the existing four-space indentation and compact Swift and C style.
-- Keep shared playback state in the `@MainActor @Observable` `PlayerModel`.
-- Send playback commands through the serial VLC queue. Keep libVLC startup and metadata work off the main thread.
-- Preserve media IDs in snapshots to reject updates from previous media.
-- Wait for metadata work before you destroy the VLC handle.
-- Reuse `PlayerModel.videoView` between the main window and Picture in Picture.
-- Keep the C bridge compatible with the bundled VLC runtime. Do not unload VLC libraries after successful initialization.
-- Keep `Vendor/VLC/include/` consistent with the VLC version in the build script.
-- Load app resources from `Bundle.main`, and copy them into `Contents/Resources` in the build script. Do not use SwiftPM resources or `Bundle.module`.
-- Use Liquid Glass for UI.
-- Keep Swift GPU buffer layouts identical to their Metal structs.
-- Reuse GPU resources. Preserve animation suspension for hidden or inactive windows and support for Reduce Motion.
-- Preserve third-party notices. Refer to `NOTICE` for distribution requirements.
-- Do not update readme unless the user ask for.
-
-## macOS build and checks
+## Build
 
 Use Xcode 26+ and the Metal Toolchain on an Apple silicon Mac. Install the toolchain with `xcodebuild -downloadComponent MetalToolchain`. Run commands from the repository root.
 
