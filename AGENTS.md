@@ -57,6 +57,7 @@ Use `./scripts/build.sh --debug` for a debug build.
 
 1. Add a section at the top of `CHANGELOG.md` for the new version, such as `## 1.2.3`. List the changes(ignore website/docs/chore commits) and commit the update.
 2. Create the matching Git tag on that commit, such as `git tag v1.2.3`.
+3. update the dmg size in `Website/public/index.html`. Round the file size to the nearest MB.
 
 A tag push to GitHub starts the release workflow.
 

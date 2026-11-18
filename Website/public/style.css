@@ -216,6 +216,9 @@ h2 {
   width: 18px;
   height: 18px;
 }
+.download-size {
+  color: #999999;
+}
 .requires {
   margin: 16px 0 0;
   color: #8e8e93;
