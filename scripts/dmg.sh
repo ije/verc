@@ -27,7 +27,7 @@ symlinks = {"Applications": "/Applications"}
 background = defines["background"]
 window_rect = ((200, 200), (680, 340))
 default_view = "icon-view"
-icon_size = 160
+icon_size = 112
 text_size = 13
 icon_locations = {"Verc.app": (160, 178), "Applications": (520, 178)}
 PYTHON
