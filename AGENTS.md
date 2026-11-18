@@ -68,7 +68,7 @@ A tag push to GitHub starts the release workflow.
 `Website/` uses TypeScript ES modules and Cloudflare Workers. All code in `index.ts`, static assets are under `public/` dir. With two routes:
 
 - `GET /`: Landing page. 
-- `POST /tmdb`: TMDB api.
+- `POST /tmdb`: TMDB API.
 
 Run commands from `Website/`. The scripts require the `cf` CLI on `PATH`.
 
