@@ -23,14 +23,15 @@ struct SeekSlider: NSViewRepresentable {
   @Binding var value: Double
   let duration: Double
   let enabled: Bool
+  let showsSavedPosition: Bool
   var editingChanged: (Bool) -> Void
 
   func makeCoordinator() -> SliderCoordinator { SliderCoordinator(value: $value) }
 
   func makeNSView(context: Context) -> Control {
-    let slider = Control()
-    slider.target = context.coordinator
-    slider.action = #selector(SliderCoordinator.changed(_:))
+    let slider = Control(
+      value: value, minValue: 0, maxValue: duration, target: context.coordinator,
+      action: #selector(SliderCoordinator.changed(_:)))
     slider.isContinuous = true
     slider.controlSize = .mini
     slider.trackFillColor = .white
@@ -41,17 +42,26 @@ struct SeekSlider: NSViewRepresentable {
   func updateNSView(_ slider: Control, context: Context) {
     context.coordinator.value = $value
     slider.editingChanged = editingChanged
+    slider.readOnly = showsSavedPosition
     slider.maxValue = duration
-    slider.isEnabled = enabled
+    // AppKit fades the track fill when a disabled slider becomes enabled.
+    slider.isEnabled = enabled || showsSavedPosition
     if !slider.scrubbing && slider.doubleValue != value { slider.doubleValue = value }
   }
 
   final class Control: NSSlider {
     var editingChanged: ((Bool) -> Void)?
     var scrubbing = false
+    var readOnly = false
+
+    override var acceptsFirstResponder: Bool { !readOnly && super.acceptsFirstResponder }
+
+    override func keyDown(with event: NSEvent) {
+      if readOnly { nextResponder?.keyDown(with: event) } else { super.keyDown(with: event) }
+    }
 
     override func mouseDown(with event: NSEvent) {
-      guard isEnabled else { return }
+      guard isEnabled, !readOnly else { return }
       scrubbing = true
       editingChanged?(true)
       super.mouseDown(with: event)

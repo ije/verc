@@ -648,6 +648,11 @@ final class VLC: @unchecked Sendable {
 }
 
 @MainActor @Observable final class PlayerModel {
+  private enum Resume {
+    case opening
+    case waiting(until: ContinuousClock.Instant)
+  }
+
   static let subtitleFonts = NSFontManager.shared.availableFontFamilies.sorted {
     $0.localizedStandardCompare($1) == .orderedAscending
   }
@@ -714,6 +719,7 @@ final class VLC: @unchecked Sendable {
   var isPictureInPicture = false
   var openLibrary: (([URL]) -> Bool)?
   private var isSavingFrame = false
+  private var resume: Resume?
   @ObservationIgnored let videoView = NSView()
   @ObservationIgnored private(set) var engine: VLC?
   @ObservationIgnored private var sleepActivity: NSObjectProtocol? {
@@ -738,7 +744,9 @@ final class VLC: @unchecked Sendable {
       && (state == .playing || state == .paused) && !isSavingFrame
   }
   var isPlaying: Bool { state == .playing }
-  var isLoading: Bool { current != nil && [.idle, .opening, .buffering].contains(state) }
+  var isLoading: Bool {
+    current != nil && (resume != nil || [.idle, .opening, .buffering].contains(state))
+  }
   var playLabel: String { isPlaying ? "Pause" : state == .ended ? "Play Again" : "Play" }
   var pictureInPictureLabel: String {
     isPictureInPicture ? "Exit Picture in Picture" : "Enter Picture in Picture"
@@ -803,6 +811,7 @@ final class VLC: @unchecked Sendable {
     case .failure(let failure):
       engineError = failure.localizedDescription
       if current != nil {
+        resume = nil
         state = .failed
         error = engineError
       }
@@ -813,12 +822,30 @@ final class VLC: @unchecked Sendable {
   private func receive(_ snapshot: PlaybackSnapshot) {
     guard current != nil, playbackID == snapshot.id else { return }
     let previous = state
-    let changed =
-      state != snapshot.state || Int(duration) != Int(snapshot.duration)
-      || seekable != snapshot.seekable
+    let previousDuration = Int(duration)
+    let wasSeekable = seekable
+    let wasResuming = resume != nil
     state = snapshot.state
-    if didStart || !isLoading { time = snapshot.time }
-    if snapshot.duration > 0 || !isLoading { duration = snapshot.duration }
+    // VLC can report playing and a zero clock before applying :start-time.
+    if let resume {
+      if state == .ended || state == .failed {
+        self.resume = nil
+      } else if state == .playing || state == .paused {
+        if snapshot.time > 0 && snapshot.time >= time - 1 && snapshot.duration > 0 {
+          self.resume = nil
+        } else {
+          switch resume {
+          case .opening: self.resume = .waiting(until: .now + .seconds(3))
+          case .waiting(let deadline):
+            if ContinuousClock.now >= deadline,
+              snapshot.time > 0 || state == .paused || !snapshot.seekable
+            { self.resume = nil }
+          }
+        }
+      }
+    }
+    if resume == nil && (didStart || !isLoading) { time = snapshot.time }
+    if resume == nil && (snapshot.duration > 0 || !isLoading) { duration = snapshot.duration }
     // VLC refines the length of some VBR files on every update, so compare whole seconds.
     if snapshot.duration > 0 && current?.duration.map(Int.init) != Int(snapshot.duration) {
       current?.duration = snapshot.duration
@@ -826,7 +853,7 @@ final class VLC: @unchecked Sendable {
         playlist[index].duration = snapshot.duration
       }
     }
-    seekable = snapshot.seekable
+    seekable = resume == nil && snapshot.seekable
     videoWidth = snapshot.width
     videoHeight = snapshot.height
     if videoRatio != snapshot.ratio {
@@ -865,7 +892,11 @@ final class VLC: @unchecked Sendable {
       error =
         "Verc could not play this media. The file may be damaged, or the stream may be unavailable."
     }
-    if changed { updateNowPlaying() }
+    if previous != state || previousDuration != Int(duration) || wasSeekable != seekable
+      || wasResuming != (resume != nil)
+    {
+      updateNowPlaying()
+    }
   }
 
   private func advance() {
@@ -1233,10 +1264,12 @@ final class VLC: @unchecked Sendable {
     subtitleID = -1
     didStart = false
     guard engineError == nil, let engine else {
+      resume = nil
       state = .failed
       error = engineError ?? "The playback engine is unavailable."
       return
     }
+    resume = time > 0 ? .opening : nil
     engine.send(.open(item.url, playbackID, time))
   }
 
@@ -1331,6 +1364,7 @@ final class VLC: @unchecked Sendable {
     playlist = []
     playlistTitle = nil
     state = .idle
+    resume = nil
     time = 0
     duration = 0
     seekable = false

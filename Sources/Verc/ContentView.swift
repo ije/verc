@@ -855,6 +855,8 @@ private struct Timeline: View {
   @State private var scrubTime = 0.0
 
   var body: some View {
+    let showsSavedPosition = player.isLoading && !player.seekable && player.time > 0
+      && player.duration > 0
     HStack(spacing: 12) {
       Text(timeLabel(scrubbing ? scrubTime : player.time)).frame(minWidth: 38, alignment: .trailing)
       SeekSlider(
@@ -865,13 +867,15 @@ private struct Timeline: View {
           set: {
             scrubTime = $0
             if !scrubbing { player.seek(to: $0) }
-          }), duration: max(player.duration, 1), enabled: player.seekable
+          }), duration: max(player.duration, 1), enabled: player.seekable,
+        showsSavedPosition: showsSavedPosition
       ) { editing in
         if editing { scrubTime = player.time }
         scrubbing = editing
         if !editing { player.seek(to: scrubTime) }
         editingChanged()
       }
+      .accessibilityHidden(showsSavedPosition)
       .frame(height: 16)
       Text(player.duration > 0 ? timeLabel(player.duration) : "—")
         .frame(minWidth: 44, alignment: .leading)
