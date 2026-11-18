@@ -12,10 +12,12 @@ const player = document.querySelector(".player"),
   canvas = player.querySelector("canvas");
 const motion = matchMedia("(prefers-reduced-motion: reduce)");
 const restingAim = [0.022, 0.45];
+const maxRenderPixels = 2560 * 1440;
 let device,
   frame = 0,
   resizeObserver,
   intersectionObserver,
+  resolution,
   stopped = false;
 
 function stop() {
@@ -23,6 +25,7 @@ function stop() {
   cancelAnimationFrame(frame);
   resizeObserver?.disconnect();
   intersectionObserver?.disconnect();
+  if (resolution) resolution.onchange = null;
   player.classList.remove("ready");
   device?.destroy();
 }
@@ -292,13 +295,20 @@ try {
     lastFrame = now;
     if (!motion.matches) time += delta;
     if (resized) {
-      const bounds = canvas.getBoundingClientRect();
+      const dpr = devicePixelRatio;
+      if (!resolution?.matches) {
+        if (resolution) resolution.onchange = null;
+        resolution = matchMedia(`(resolution: ${dpr}dppx)`);
+        resolution.onchange = resize;
+      }
+      const { width, height } = canvas.getBoundingClientRect();
       const scale = Math.min(
-        Math.max(devicePixelRatio, 1280 / Math.max(bounds.width, 1)),
-        1920 / Math.max(bounds.width, 1),
+        dpr,
+        Math.sqrt(maxRenderPixels / Math.max(width * height, 1)),
+        device.limits.maxTextureDimension2D / Math.max(width, height, 1),
       );
-      canvas.width = Math.max(1, Math.round(bounds.width * scale));
-      canvas.height = Math.max(1, Math.round(bounds.height * scale));
+      canvas.width = Math.max(1, Math.round(width * scale));
+      canvas.height = Math.max(1, Math.round(height * scale));
       const aspect = canvas.width / canvas.height;
       let worst = 0;
       for (const x of [-1, 0, 1]) {
@@ -570,10 +580,11 @@ try {
       frame = requestAnimationFrame(render);
     }
   }
-  resizeObserver = new ResizeObserver(() => {
+  function resize() {
     resized = true;
     schedule();
-  });
+  }
+  resizeObserver = new ResizeObserver(resize);
   resizeObserver.observe(canvas);
   intersectionObserver = new IntersectionObserver((entries) => {
     visible = entries[0].isIntersecting;
