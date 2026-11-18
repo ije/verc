@@ -2,6 +2,8 @@
 
 A media player with a modern UI for macOS, powered by VLC.
 
+![screenshot](./Resources/screenshot.png)
+
 ## Development
 
 Requires Xcode 26+ and the Metal Toolchain on an Apple silicon Mac.
