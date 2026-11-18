@@ -173,7 +173,12 @@ h2 {
   letter-spacing: -0.03em;
 }
 h2 {
-  color: #888888;
+  color: #999999;
+}
+.vlc-icon {
+  width: 0.85em;
+  height: 0.85em;
+  vertical-align: -0.08em;
 }
 .download {
   display: inline-flex;
@@ -1172,7 +1177,7 @@ footer p a:hover {
 @media (max-width: 600px) {
   header {
     height: 80px;
-    padding: 0 24px;
+    padding: 0 20px;
   }
   .logo {
     margin-left: -9px;
@@ -1183,7 +1188,7 @@ footer p a:hover {
   }
   main {
     margin-top: 32px;
-    padding: 0 24px 56px;
+    padding: 0 20px 56px;
   }
   .hero h1,
   .hero h2 {
@@ -1203,7 +1208,7 @@ footer p a:hover {
     text-wrap: pretty;
   }
   .player-stage {
-    --player-width: min(calc(100vw - 48px), calc(80svh * 16 / 9));
+    --player-width: min(calc(100vw - 32px), calc(80svh * 16 / 9));
     margin-top: 48px;
   }
   .player {
@@ -1214,7 +1219,7 @@ footer p a:hover {
   footer {
     flex-wrap: wrap;
     gap: 16px 4px;
-    padding: 0 24px 32px;
+    padding: 0 20px 32px;
   }
   footer p {
     flex-basis: 100%;
