@@ -47,11 +47,18 @@ Verc is a media player for Apple silicon and macOS 26+. It uses Swift 6, SwiftUI
 Use Xcode 26+ and the Metal Toolchain on an Apple silicon Mac. Install the toolchain with `xcodebuild -downloadComponent MetalToolchain`. Run commands from the repository root.
 
 ```sh
-./scripts/build.sh --debug
+./scripts/build.sh
 open dist/Verc.app
 ```
 
-For release or bundle changes, run `./scripts/build.sh`. 
+Use `./scripts/build.sh --debug` for a debug build.
+
+## Release
+
+1. Add a section at the top of `CHANGELOG.md` for the new version, such as `## 1.2.3`. List the changes(ignore website/docs/chore commits) and commit the update.
+2. Create the matching Git tag on that commit, such as `git tag v1.2.3`.
+
+A tag push to GitHub starts the release workflow.
 
 ## Website
 

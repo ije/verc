@@ -13,7 +13,7 @@ Requires Xcode 26+ and the Metal Toolchain on an Apple silicon Mac.
 open dist/Verc.app
 ```
 
-Use `--debug` for a debug build.
+Use `./scripts/build.sh --debug` for a debug build.
 
 ## License
 
