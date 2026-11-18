@@ -1,20 +1,55 @@
-Verc website
+
+Verc
 Copyright (C) 2026 Verc contributors
 SPDX-License-Identifier: GPL-2.0-only
 
-Source: https://github.com/ije/verc/tree/main/Website
-License: LICENSE.txt
+Verc is free software. You can redistribute it and modify it under the GNU
+General Public License, version 2, as published by the Free Software Foundation.
+Verc comes without any warranty. See LICENSE for the full terms.
 
-The website uses Geist Sans.
-Copyright 2026 The Geist Project Authors.
-Its SIL Open Font License is in Geist-LICENSE.txt.
-Source: https://github.com/vercel/geist-font
+Verc uses libVLC's public C API and VLC's filter interfaces. The
+standalone build includes selected VLC 3.x libraries and playback plugins.
+VLC and libVLC retain their own licenses and copyrights. Build-only plugin
+headers are from VLC 3.0.24. Their LGPL license is in Vendor/VLC/COPYING.LIB,
+and the app includes it as VLC-COPYING.LIB.txt.
 
-The WebGPU prism ports Verc's Metal scene, adapted from vgpu by Vercel.
-Copyright (c) 2025 Vercel, Inc.
-Its MIT license is in Vgpu-LICENSE.txt.
+Verc bundles libraries and plugins from the official VLC 3.0.24 macOS ARM64
+build (vlc-3.0.24-arm64.dmg, SHA-256
+64a89d93cdd30b0e97131743e246373db82d6826ea882d265d46d74b136da2b7).
+Each Verc release publishes the VLC source next to its DMG:
+vlc-3.0.24.tar.xz, SHA-256
+e7cab503d1d7d5849b89d2cf0e1ee60d0ef6d012407791b644b9cfc0cc225fdf.
+Releases: https://github.com/ije/verc/releases
+
+Written offer: for at least three years after we last distribute a Verc
+release, we will give any third party the complete corresponding source code of
+the VLC libraries and plugins in that release, including the third-party
+libraries they contain, for no more than our cost of physically performing
+source distribution. Ask at https://github.com/ije/verc/issues.
+
+If you distribute your own build, you must meet these duties yourself. Some VLC
+configurations contain GPL v3 components and are not suitable for a GPL v2-only
+distribution. Check the licenses of the plugins in scripts/vlc-plugins.json.
+
+VLC source: https://code.videolan.org/videolan/vlc
+VLC releases: https://download.videolan.org/pub/videolan/vlc/
+libVLC documentation: https://videolan.videolan.me/vlc-3.0/
+
+Verc uses Apple system frameworks and SF Symbols from macOS. Verc does not
+include separate SF Symbols font files. Apple terms apply to those resources.
+
+The animated drop icon adapts Material Line Icons by Vjacheslav Trushkin
+to native SwiftUI. Its MIT license is in LineMD-LICENSE.txt.
+Source: https://github.com/cyberalien/line-md
+
+The start page adapts vgpu's prism scene to Metal, including its beveled mesh,
+spectral light mesh, optical equations, studio reflections, bloom, and dust.
+Copyright (c) 2025 Vercel, Inc. Its MIT license is in Vgpu-LICENSE.txt.
 Source: https://github.com/vercel-labs/vgpu/tree/9c23f6c02db06cff4a4c4d38656c0e6f1bda203f/apps/docs/app/%5Blang%5D/%28home%29/components/prism-background
 
-Movie and TV artwork and metadata are from TMDB. This product uses the TMDB
-API but is not endorsed or certified by TMDB. TMDB terms apply to its logo.
+Verc uses the TMDB API for movie and TV information and artwork, but Verc is not
+endorsed or certified by TMDB. TMDB.svg is the TMDB logo, and TMDB terms apply to it.
 Source: https://www.themoviedb.org/
+
+VLC provides the playback reference. Vercel provides the visual reference.
+Verc has no affiliation with VideoLAN or Vercel.

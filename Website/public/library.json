@@ -6,8 +6,8 @@
     "title": "Yi Yi",
     "overview": "Each member of a family in Taipei asks hard questions about life's meaning as they live through everyday quandaries. NJ is morose: his brother owes him money, his mother is in a coma, his wife suffers a spiritual crisis when she finds her life a blank and his business partners make bad decisions.",
     "releaseDate": "2000-09-20",
-    "posterURL": "/assets/25538-poster.jpg",
-    "backgroundURL": "/assets/25538-backdrop.jpg",
+    "posterURL": "/images/tmdb/25538-poster.jpg",
+    "backgroundURL": "/images/tmdb/25538-backdrop.jpg",
     "url": "https://www.themoviedb.org/movie/25538",
     "credits": [
       {
@@ -33,7 +33,7 @@
     "media": [
       {
         "title": "Yi Yi",
-        "stillURL": "/assets/25538-backdrop.jpg",
+        "stillURL": "/images/tmdb/25538-backdrop.jpg",
         "url": "https://www.themoviedb.org/movie/25538"
       }
     ]
@@ -45,8 +45,8 @@
     "title": "The Wire",
     "overview": "Told from the points of view of both the Baltimore homicide and narcotics detectives and their targets, the series captures a universe in which the national war on drugs has become a permanent, self-sustaining bureaucracy, and distinctions between good and evil are routinely obliterated.",
     "releaseDate": "2002-06-02",
-    "posterURL": "/assets/1438-poster.jpg",
-    "backgroundURL": "/assets/1438-backdrop.jpg",
+    "posterURL": "/images/tmdb/1438-poster.jpg",
+    "backgroundURL": "/images/tmdb/1438-backdrop.jpg",
     "url": "https://www.themoviedb.org/tv/1438",
     "credits": [
       {
@@ -88,91 +88,91 @@
         "season": 1,
         "episode": 1,
         "title": "The Target",
-        "stillURL": "/assets/1438-s1e1.jpg",
+        "stillURL": "/images/tmdb/1438-s1e1.jpg",
         "url": "https://www.themoviedb.org/tv/1438/season/1/episode/1"
       },
       {
         "season": 1,
         "episode": 2,
         "title": "The Detail",
-        "stillURL": "/assets/1438-s1e2.jpg",
+        "stillURL": "/images/tmdb/1438-s1e2.jpg",
         "url": "https://www.themoviedb.org/tv/1438/season/1/episode/2"
       },
       {
         "season": 1,
         "episode": 3,
         "title": "The Buys",
-        "stillURL": "/assets/1438-s1e3.jpg",
+        "stillURL": "/images/tmdb/1438-s1e3.jpg",
         "url": "https://www.themoviedb.org/tv/1438/season/1/episode/3"
       },
       {
         "season": 1,
         "episode": 4,
         "title": "Old Cases",
-        "stillURL": "/assets/1438-s1e4.jpg",
+        "stillURL": "/images/tmdb/1438-s1e4.jpg",
         "url": "https://www.themoviedb.org/tv/1438/season/1/episode/4"
       },
       {
         "season": 1,
         "episode": 5,
         "title": "The Pager",
-        "stillURL": "/assets/1438-s1e5.jpg",
+        "stillURL": "/images/tmdb/1438-s1e5.jpg",
         "url": "https://www.themoviedb.org/tv/1438/season/1/episode/5"
       },
       {
         "season": 1,
         "episode": 6,
         "title": "The Wire",
-        "stillURL": "/assets/1438-s1e6.jpg",
+        "stillURL": "/images/tmdb/1438-s1e6.jpg",
         "url": "https://www.themoviedb.org/tv/1438/season/1/episode/6"
       },
       {
         "season": 1,
         "episode": 7,
         "title": "One Arrest",
-        "stillURL": "/assets/1438-s1e7.jpg",
+        "stillURL": "/images/tmdb/1438-s1e7.jpg",
         "url": "https://www.themoviedb.org/tv/1438/season/1/episode/7"
       },
       {
         "season": 1,
         "episode": 8,
         "title": "Lessons",
-        "stillURL": "/assets/1438-s1e8.jpg",
+        "stillURL": "/images/tmdb/1438-s1e8.jpg",
         "url": "https://www.themoviedb.org/tv/1438/season/1/episode/8"
       },
       {
         "season": 1,
         "episode": 9,
         "title": "Game Day",
-        "stillURL": "/assets/1438-s1e9.jpg",
+        "stillURL": "/images/tmdb/1438-s1e9.jpg",
         "url": "https://www.themoviedb.org/tv/1438/season/1/episode/9"
       },
       {
         "season": 1,
         "episode": 10,
         "title": "The Cost",
-        "stillURL": "/assets/1438-s1e10.jpg",
+        "stillURL": "/images/tmdb/1438-s1e10.jpg",
         "url": "https://www.themoviedb.org/tv/1438/season/1/episode/10"
       },
       {
         "season": 1,
         "episode": 11,
         "title": "The Hunt",
-        "stillURL": "/assets/1438-s1e11.jpg",
+        "stillURL": "/images/tmdb/1438-s1e11.jpg",
         "url": "https://www.themoviedb.org/tv/1438/season/1/episode/11"
       },
       {
         "season": 1,
         "episode": 12,
         "title": "Cleaning Up",
-        "stillURL": "/assets/1438-s1e12.jpg",
+        "stillURL": "/images/tmdb/1438-s1e12.jpg",
         "url": "https://www.themoviedb.org/tv/1438/season/1/episode/12"
       },
       {
         "season": 1,
         "episode": 13,
         "title": "Sentencing",
-        "stillURL": "/assets/1438-s1e13.jpg",
+        "stillURL": "/images/tmdb/1438-s1e13.jpg",
         "url": "https://www.themoviedb.org/tv/1438/season/1/episode/13"
       }
     ]
@@ -184,8 +184,8 @@
     "title": "Scavengers Reign",
     "overview": "When a deep space freighter is damaged by a solar flare its surviving crew are stranded on a beautiful and unforgiving planet. They begin to learn the true nature of this planet as they try to survive long enough to escape or be rescued.",
     "releaseDate": "2023-10-19",
-    "posterURL": "/assets/204154-poster.jpg",
-    "backgroundURL": "/assets/204154-backdrop.jpg",
+    "posterURL": "/images/tmdb/204154-poster.jpg",
+    "backgroundURL": "/images/tmdb/204154-backdrop.jpg",
     "url": "https://www.themoviedb.org/tv/204154",
     "credits": [
       {
@@ -227,84 +227,84 @@
         "season": 1,
         "episode": 1,
         "title": "The Signal",
-        "stillURL": "/assets/204154-s1e1.jpg",
+        "stillURL": "/images/tmdb/204154-s1e1.jpg",
         "url": "https://www.themoviedb.org/tv/204154/season/1/episode/1"
       },
       {
         "season": 1,
         "episode": 2,
         "title": "The Storm",
-        "stillURL": "/assets/204154-s1e2.jpg",
+        "stillURL": "/images/tmdb/204154-s1e2.jpg",
         "url": "https://www.themoviedb.org/tv/204154/season/1/episode/2"
       },
       {
         "season": 1,
         "episode": 3,
         "title": "The Wall",
-        "stillURL": "/assets/204154-s1e3.jpg",
+        "stillURL": "/images/tmdb/204154-s1e3.jpg",
         "url": "https://www.themoviedb.org/tv/204154/season/1/episode/3"
       },
       {
         "season": 1,
         "episode": 4,
         "title": "The Dream",
-        "stillURL": "/assets/204154-s1e4.jpg",
+        "stillURL": "/images/tmdb/204154-s1e4.jpg",
         "url": "https://www.themoviedb.org/tv/204154/season/1/episode/4"
       },
       {
         "season": 1,
         "episode": 5,
         "title": "The Demeter",
-        "stillURL": "/assets/204154-s1e5.jpg",
+        "stillURL": "/images/tmdb/204154-s1e5.jpg",
         "url": "https://www.themoviedb.org/tv/204154/season/1/episode/5"
       },
       {
         "season": 1,
         "episode": 6,
         "title": "The Fall",
-        "stillURL": "/assets/204154-s1e6.jpg",
+        "stillURL": "/images/tmdb/204154-s1e6.jpg",
         "url": "https://www.themoviedb.org/tv/204154/season/1/episode/6"
       },
       {
         "season": 1,
         "episode": 7,
         "title": "The Cure",
-        "stillURL": "/assets/204154-s1e7.jpg",
+        "stillURL": "/images/tmdb/204154-s1e7.jpg",
         "url": "https://www.themoviedb.org/tv/204154/season/1/episode/7"
       },
       {
         "season": 1,
         "episode": 8,
         "title": "The Nest",
-        "stillURL": "/assets/204154-s1e8.jpg",
+        "stillURL": "/images/tmdb/204154-s1e8.jpg",
         "url": "https://www.themoviedb.org/tv/204154/season/1/episode/8"
       },
       {
         "season": 1,
         "episode": 9,
         "title": "The Mountain",
-        "stillURL": "/assets/204154-s1e9.jpg",
+        "stillURL": "/images/tmdb/204154-s1e9.jpg",
         "url": "https://www.themoviedb.org/tv/204154/season/1/episode/9"
       },
       {
         "season": 1,
         "episode": 10,
         "title": "The Decision",
-        "stillURL": "/assets/204154-s1e10.jpg",
+        "stillURL": "/images/tmdb/204154-s1e10.jpg",
         "url": "https://www.themoviedb.org/tv/204154/season/1/episode/10"
       },
       {
         "season": 1,
         "episode": 11,
         "title": "The Return",
-        "stillURL": "/assets/204154-s1e11.jpg",
+        "stillURL": "/images/tmdb/204154-s1e11.jpg",
         "url": "https://www.themoviedb.org/tv/204154/season/1/episode/11"
       },
       {
         "season": 1,
         "episode": 12,
         "title": "The Reunion",
-        "stillURL": "/assets/204154-s1e12.jpg",
+        "stillURL": "/images/tmdb/204154-s1e12.jpg",
         "url": "https://www.themoviedb.org/tv/204154/season/1/episode/12"
       }
     ]
@@ -316,8 +316,8 @@
     "title": "The Matrix",
     "overview": "Set in the 22nd century, The Matrix tells the story of a computer hacker who joins a group of underground insurgents fighting the vast and powerful computers who now rule the earth.",
     "releaseDate": "1999-03-31",
-    "posterURL": "/assets/603-poster.jpg",
-    "backgroundURL": "/assets/603-backdrop.jpg",
+    "posterURL": "/images/tmdb/603-poster.jpg",
+    "backgroundURL": "/images/tmdb/603-backdrop.jpg",
     "url": "https://www.themoviedb.org/movie/603",
     "credits": [
       {
@@ -343,7 +343,7 @@
     "media": [
       {
         "title": "The Matrix",
-        "stillURL": "/assets/603-backdrop.jpg",
+        "stillURL": "/images/tmdb/603-backdrop.jpg",
         "url": "https://www.themoviedb.org/movie/603"
       }
     ]
@@ -355,8 +355,8 @@
     "title": "Cowboy Bebop",
     "overview": "In 2071, roughly fifty years after an accident with a hyperspace gateway made the Earth almost uninhabitable, humanity has colonized most of the rocky planets and moons of the Solar System. Amid a rising crime rate, the Inter Solar System Police (ISSP) set up a legalized contract system, in which registered bounty hunters, also referred to as \"Cowboys\", chase criminals and bring them in alive in return for a reward.",
     "releaseDate": "1998-04-03",
-    "posterURL": "/assets/30991-poster.jpg",
-    "backgroundURL": "/assets/30991-backdrop.jpg",
+    "posterURL": "/images/tmdb/30991-poster.jpg",
+    "backgroundURL": "/images/tmdb/30991-backdrop.jpg",
     "url": "https://www.themoviedb.org/tv/30991",
     "credits": [
       {
@@ -397,182 +397,182 @@
         "season": 1,
         "episode": 1,
         "title": "Stray Dog Strut",
-        "stillURL": "/assets/30991-s1e1.jpg",
+        "stillURL": "/images/tmdb/30991-s1e1.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/1"
       },
       {
         "season": 1,
         "episode": 2,
         "title": "Honky Tonk Women",
-        "stillURL": "/assets/30991-s1e2.jpg",
+        "stillURL": "/images/tmdb/30991-s1e2.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/2"
       },
       {
         "season": 1,
         "episode": 3,
         "title": "Heavy Metal Queen",
-        "stillURL": "/assets/30991-s1e3.jpg",
+        "stillURL": "/images/tmdb/30991-s1e3.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/3"
       },
       {
         "season": 1,
         "episode": 4,
         "title": "Waltz for Venus",
-        "stillURL": "/assets/30991-s1e4.jpg",
+        "stillURL": "/images/tmdb/30991-s1e4.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/4"
       },
       {
         "season": 1,
         "episode": 5,
         "title": "Jamming with Edward",
-        "stillURL": "/assets/30991-s1e5.jpg",
+        "stillURL": "/images/tmdb/30991-s1e5.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/5"
       },
       {
         "season": 1,
         "episode": 6,
         "title": "Ganymede Elegy",
-        "stillURL": "/assets/30991-s1e6.jpg",
+        "stillURL": "/images/tmdb/30991-s1e6.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/6"
       },
       {
         "season": 1,
         "episode": 7,
         "title": "Toys in the Attic",
-        "stillURL": "/assets/30991-s1e7.jpg",
+        "stillURL": "/images/tmdb/30991-s1e7.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/7"
       },
       {
         "season": 1,
         "episode": 8,
         "title": "Jupiter Jazz (1)",
-        "stillURL": "/assets/30991-s1e8.jpg",
+        "stillURL": "/images/tmdb/30991-s1e8.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/8"
       },
       {
         "season": 1,
         "episode": 9,
         "title": "Jupiter Jazz (2)",
-        "stillURL": "/assets/30991-s1e9.jpg",
+        "stillURL": "/images/tmdb/30991-s1e9.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/9"
       },
       {
         "season": 1,
         "episode": 10,
         "title": "Bohemian Rhapsody",
-        "stillURL": "/assets/30991-s1e10.jpg",
+        "stillURL": "/images/tmdb/30991-s1e10.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/10"
       },
       {
         "season": 1,
         "episode": 11,
         "title": "My Funny Valentine",
-        "stillURL": "/assets/30991-s1e11.jpg",
+        "stillURL": "/images/tmdb/30991-s1e11.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/11"
       },
       {
         "season": 1,
         "episode": 12,
         "title": "Speak Like a Child",
-        "stillURL": "/assets/30991-s1e12.jpg",
+        "stillURL": "/images/tmdb/30991-s1e12.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/12"
       },
       {
         "season": 1,
         "episode": 13,
         "title": "Asteroid Blues",
-        "stillURL": "/assets/30991-s1e13.jpg",
+        "stillURL": "/images/tmdb/30991-s1e13.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/13"
       },
       {
         "season": 1,
         "episode": 14,
         "title": "Gateway Shuffle",
-        "stillURL": "/assets/30991-s1e14.jpg",
+        "stillURL": "/images/tmdb/30991-s1e14.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/14"
       },
       {
         "season": 1,
         "episode": 15,
         "title": "Ballad of Fallen Angels",
-        "stillURL": "/assets/30991-s1e15.jpg",
+        "stillURL": "/images/tmdb/30991-s1e15.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/15"
       },
       {
         "season": 1,
         "episode": 16,
         "title": "Sympathy for the Devil",
-        "stillURL": "/assets/30991-s1e16.jpg",
+        "stillURL": "/images/tmdb/30991-s1e16.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/16"
       },
       {
         "season": 1,
         "episode": 17,
         "title": "Black Dog Serenade",
-        "stillURL": "/assets/30991-s1e17.jpg",
+        "stillURL": "/images/tmdb/30991-s1e17.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/17"
       },
       {
         "season": 1,
         "episode": 18,
         "title": "Mushroom Samba",
-        "stillURL": "/assets/30991-s1e18.jpg",
+        "stillURL": "/images/tmdb/30991-s1e18.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/18"
       },
       {
         "season": 1,
         "episode": 19,
         "title": "Wild Horses",
-        "stillURL": "/assets/30991-s1e19.jpg",
+        "stillURL": "/images/tmdb/30991-s1e19.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/19"
       },
       {
         "season": 1,
         "episode": 20,
         "title": "Pierrot Le Fou",
-        "stillURL": "/assets/30991-s1e20.jpg",
+        "stillURL": "/images/tmdb/30991-s1e20.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/20"
       },
       {
         "season": 1,
         "episode": 21,
         "title": "Boogie Woogie Feng Shui",
-        "stillURL": "/assets/30991-s1e21.jpg",
+        "stillURL": "/images/tmdb/30991-s1e21.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/21"
       },
       {
         "season": 1,
         "episode": 22,
         "title": "Cowboy Funk",
-        "stillURL": "/assets/30991-s1e22.jpg",
+        "stillURL": "/images/tmdb/30991-s1e22.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/22"
       },
       {
         "season": 1,
         "episode": 23,
         "title": "Brain Scratch",
-        "stillURL": "/assets/30991-s1e23.jpg",
+        "stillURL": "/images/tmdb/30991-s1e23.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/23"
       },
       {
         "season": 1,
         "episode": 24,
         "title": "Hard Luck Woman",
-        "stillURL": "/assets/30991-s1e24.jpg",
+        "stillURL": "/images/tmdb/30991-s1e24.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/24"
       },
       {
         "season": 1,
         "episode": 25,
         "title": "The Real Folk Blues (1)",
-        "stillURL": "/assets/30991-s1e25.jpg",
+        "stillURL": "/images/tmdb/30991-s1e25.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/25"
       },
       {
         "season": 1,
         "episode": 26,
         "title": "The Real Folk Blues (2)",
-        "stillURL": "/assets/30991-s1e26.jpg",
+        "stillURL": "/images/tmdb/30991-s1e26.jpg",
         "url": "https://www.themoviedb.org/tv/30991/season/1/episode/26"
       }
     ]
@@ -584,8 +584,8 @@
     "title": "No Country for Old Men",
     "overview": "Llewelyn Moss stumbles upon dead bodies, $2 million and a hoard of heroin in a Texas desert, but methodical killer Anton Chigurh comes looking for it, with local sheriff Ed Tom Bell hot on his trail. The roles of prey and predator blur as the violent pursuit of money and justice collide.",
     "releaseDate": "2007-11-09",
-    "posterURL": "/assets/6977-poster.jpg",
-    "backgroundURL": "/assets/6977-backdrop.jpg",
+    "posterURL": "/images/tmdb/6977-poster.jpg",
+    "backgroundURL": "/images/tmdb/6977-backdrop.jpg",
     "url": "https://www.themoviedb.org/movie/6977",
     "credits": [
       {
@@ -611,7 +611,7 @@
     "media": [
       {
         "title": "No Country for Old Men",
-        "stillURL": "/assets/6977-backdrop.jpg",
+        "stillURL": "/images/tmdb/6977-backdrop.jpg",
         "url": "https://www.themoviedb.org/movie/6977"
       }
     ]
@@ -623,8 +623,8 @@
     "title": "2001: A Space Odyssey",
     "overview": "Humanity finds a mysterious object buried beneath the lunar surface and sets off to find its origins with the help of HAL 9000, the world's most advanced super computer.",
     "releaseDate": "1968-04-02",
-    "posterURL": "/assets/62-poster.jpg",
-    "backgroundURL": "/assets/62-backdrop.jpg",
+    "posterURL": "/images/tmdb/62-poster.jpg",
+    "backgroundURL": "/images/tmdb/62-backdrop.jpg",
     "url": "https://www.themoviedb.org/movie/62",
     "credits": [
       {
@@ -650,7 +650,7 @@
     "media": [
       {
         "title": "2001: A Space Odyssey",
-        "stillURL": "/assets/62-backdrop.jpg",
+        "stillURL": "/images/tmdb/62-backdrop.jpg",
         "url": "https://www.themoviedb.org/movie/62"
       }
     ]
@@ -662,8 +662,8 @@
     "title": "The Silence of the Lambs",
     "overview": "Clarice Starling is a top student at the FBI's training academy.  Jack Crawford wants Clarice to interview Dr. Hannibal Lecter, a brilliant psychiatrist who is also a violent psychopath, serving life behind bars for various acts of murder and cannibalism.  Crawford believes that Lecter may have insight into a case and that Starling, as an attractive young woman, may be just the bait to draw him out.",
     "releaseDate": "1991-02-14",
-    "posterURL": "/assets/274-poster.jpg",
-    "backgroundURL": "/assets/274-backdrop.jpg",
+    "posterURL": "/images/tmdb/274-poster.jpg",
+    "backgroundURL": "/images/tmdb/274-backdrop.jpg",
     "url": "https://www.themoviedb.org/movie/274",
     "credits": [
       {
@@ -689,7 +689,7 @@
     "media": [
       {
         "title": "The Silence of the Lambs",
-        "stillURL": "/assets/274-backdrop.jpg",
+        "stillURL": "/images/tmdb/274-backdrop.jpg",
         "url": "https://www.themoviedb.org/movie/274"
       }
     ]
@@ -701,8 +701,8 @@
     "title": "Perfect Blue",
     "overview": "Rising pop star Mima Kirigoe quits singing to pursue a career as an actress. After she takes up a role on a popular detective show, her handlers and collaborators begin turning up murdered. Harboring feelings of guilt and haunted by visions of her former self, Mima's reality and fantasy meld into a frenzied paranoia.",
     "releaseDate": "1998-02-28",
-    "posterURL": "/assets/10494-poster.jpg",
-    "backgroundURL": "/assets/10494-backdrop.jpg",
+    "posterURL": "/images/tmdb/10494-poster.jpg",
+    "backgroundURL": "/images/tmdb/10494-backdrop.jpg",
     "url": "https://www.themoviedb.org/movie/10494",
     "credits": [
       {
@@ -728,7 +728,7 @@
     "media": [
       {
         "title": "Perfect Blue",
-        "stillURL": "/assets/10494-backdrop.jpg",
+        "stillURL": "/images/tmdb/10494-backdrop.jpg",
         "url": "https://www.themoviedb.org/movie/10494"
       }
     ]
@@ -740,8 +740,8 @@
     "title": "Anatomy of a Fall",
     "overview": "A woman is suspected of her husband's murder, and their blind son faces a moral dilemma as the sole witness.",
     "releaseDate": "2023-08-23",
-    "posterURL": "/assets/915935-poster.jpg",
-    "backgroundURL": "/assets/915935-backdrop.jpg",
+    "posterURL": "/images/tmdb/915935-poster.jpg",
+    "backgroundURL": "/images/tmdb/915935-backdrop.jpg",
     "url": "https://www.themoviedb.org/movie/915935",
     "credits": [
       {
@@ -767,7 +767,7 @@
     "media": [
       {
         "title": "Anatomy of a Fall",
-        "stillURL": "/assets/915935-backdrop.jpg",
+        "stillURL": "/images/tmdb/915935-backdrop.jpg",
         "url": "https://www.themoviedb.org/movie/915935"
       }
     ]
@@ -779,8 +779,8 @@
     "title": "Black Cat, White Cat",
     "overview": "A small-time hustler makes a deal with a notorious gangster to whom he owes money: marry his teenage son to the latter's daughter. However, the young lovers are not as agreeable.",
     "releaseDate": "1998-06-01",
-    "posterURL": "/assets/1075-poster.jpg",
-    "backgroundURL": "/assets/1075-backdrop.jpg",
+    "posterURL": "/images/tmdb/1075-poster.jpg",
+    "backgroundURL": "/images/tmdb/1075-backdrop.jpg",
     "url": "https://www.themoviedb.org/movie/1075",
     "credits": [
       {
@@ -806,7 +806,7 @@
     "media": [
       {
         "title": "Black Cat, White Cat",
-        "stillURL": "/assets/1075-backdrop.jpg",
+        "stillURL": "/images/tmdb/1075-backdrop.jpg",
         "url": "https://www.themoviedb.org/movie/1075"
       }
     ]
@@ -818,8 +818,8 @@
     "title": "Eternity and a Day",
     "overview": "Famous writer Alexander contracts a terminal illness. He receives a letter from his wife describing a summer day 30 years ago, and leaves his seaside home to remember his past. This journey will allow him to wander between the past and the present, and encounter unexpected people, allowing him to collect unforgettable memories in the final moments of his life.",
     "releaseDate": "1998-10-23",
-    "posterURL": "/assets/24858-poster.jpg",
-    "backgroundURL": "/assets/24858-backdrop.jpg",
+    "posterURL": "/images/tmdb/24858-poster.jpg",
+    "backgroundURL": "/images/tmdb/24858-backdrop.jpg",
     "url": "https://www.themoviedb.org/movie/24858",
     "credits": [
       {
@@ -845,7 +845,7 @@
     "media": [
       {
         "title": "Eternity and a Day",
-        "stillURL": "/assets/24858-backdrop.jpg",
+        "stillURL": "/images/tmdb/24858-backdrop.jpg",
         "url": "https://www.themoviedb.org/movie/24858"
       }
     ]
