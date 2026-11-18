@@ -7,6 +7,7 @@ Less is more. Keep code concise and changes focused. Performance matters.
 - Keep one-use logic inline. Extract helpers only for shared logic.
 - Add comments only to warn about constraints or unexpected behavior.
 - Use direct, plain language in documentation and comments.
+- Do not add automated tests, test dependencies, or test configuration.
 
 ## Project
 
@@ -65,8 +66,7 @@ Run commands from `Website/`. The scripts require the `cf` CLI on `PATH`.
 bun install
 bun run dev
 bun run build
-bun test
 ```
 
-After Worker changes, check search, episode lookup, invalid requests, CORS, cache behavior, and upstream errors.
+After Worker changes, manually check search, episode lookup, invalid requests, CORS, cache behavior, and upstream errors.
 Use `bun run deploy` to deploy the Worker when the task requires deployment.
