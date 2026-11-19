@@ -238,6 +238,8 @@ struct PlayerCommands: Commands {
         .keyboardShortcut(browsing ? KeyboardShortcut(.rightArrow) : nil)
         .disabled(!browsing || favorites.pages.isEmpty)
       Divider()
+      Button("Show Library") { favorites.showAllMedia = true }
+        .keyboardShortcut("l", modifiers: [.command, .shift]).disabled(!browsing)
       Button("Show Playlist") { showPlaylist = true }.keyboardShortcut("l").disabled(
         player.playlist.count < 2)
       Toggle("Fill Window", isOn: $player.fillVideo)

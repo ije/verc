@@ -93,7 +93,7 @@ struct StartPage: View {
                 .foregroundStyle(.white.opacity(libraryHovered ? 1 : 0.7))
                 .frame(width: 32, height: 36).contentShape(Rectangle())
             }
-            .buttonStyle(.plain).help("Library").accessibilityLabel("Library")
+            .buttonStyle(.plain).help("Library · ⇧⌘L").accessibilityLabel("Library")
             .onHover { libraryHovered = $0 }
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: libraryHovered)
             Rectangle().fill(.white.opacity(0.15)).frame(width: 1, height: 20).padding(
