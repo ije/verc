@@ -15,7 +15,7 @@
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
-  background: #08090a;
+  background: #0a0a0a;
   color: var(--text-color);
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
@@ -169,13 +169,9 @@ h1,
 h2 {
   margin: 0;
   font-size: clamp(36px, 3.4vw, 48px);
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.15;
   letter-spacing: -0.03em;
-}
-h2 {
-  font-weight: 600;
-  color: #999999;
 }
 .hero h2 a:hover {
   color: var(--text-color);
@@ -289,10 +285,8 @@ h2 {
   height: 100%;
   object-fit: cover;
 }
-.player.ready .fallback {
-  visibility: hidden;
-}
 .player.ready canvas {
+  position: relative;
   opacity: 1;
 }
 .player:not([data-view="prism"]) .fallback,
@@ -1246,6 +1240,9 @@ footer p a:hover {
     width: var(--player-width);
     border-radius: 10px;
     transition: none;
+  }
+  .player > canvas {
+    display: none;
   }
   footer {
     flex-wrap: wrap;
