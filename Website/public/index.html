@@ -33,8 +33,12 @@
       crossorigin
     />
     <link rel="stylesheet" href="/style.css" />
-    <link rel="modulepreload" href="/scene.js" />
-    <script type="module" src="/prism.js"></script>
+    <script type="module">
+      const mobile = matchMedia("(max-width: 600px)");
+      if (mobile.matches)
+        mobile.addEventListener("change", () => import("/prism.js"), { once: true });
+      else import("/prism.js");
+    </script>
     <script type="module" src="/library.js"></script>
     <script type="module" src="/trailer.js"></script>
     <script type="module" src="/glass.js"></script>
