@@ -664,7 +664,8 @@ h2 {
 }
 .gallery-track::-webkit-scrollbar,
 .description-scroll::-webkit-scrollbar,
-.library::-webkit-scrollbar {
+.library::-webkit-scrollbar,
+#about::-webkit-scrollbar {
   display: none;
 }
 .gallery-track a {
@@ -1101,7 +1102,10 @@ h2 {
   --glass-tint: #12151a4d;
   --glass-blur: 4px;
   position: fixed;
-  width: 300px;
+  width: min(300px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: hidden auto;
+  scrollbar-width: none;
   padding: 26px;
   border-color: #ffffff2e;
   border-radius: 22px;
@@ -1114,6 +1118,9 @@ h2 {
     scale 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
     display 0.3s allow-discrete,
     overlay 0.3s allow-discrete;
+}
+#about::after {
+  inset: 0;
 }
 #about:popover-open {
   scale: 1;
