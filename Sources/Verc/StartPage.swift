@@ -217,7 +217,7 @@ private struct FavoriteLibrary: View {
   @AppStorage("librarySortByYear") private var sortByYear = false
   @State private var search = ""
   @State private var showOptions = false
-  @FocusState private var searchFocused: Bool
+  @FocusState private var gridFocused: Bool
 
   var body: some View {
     let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -238,7 +238,7 @@ private struct FavoriteLibrary: View {
       HStack(spacing: 16) {
         HStack(spacing: 10) {
           Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-          TextField("Search", text: $search).textFieldStyle(.plain).focused($searchFocused)
+          TextField("Search", text: $search).textFieldStyle(.plain)
           if !search.isEmpty {
             Button {
               search = ""
@@ -360,6 +360,7 @@ private struct FavoriteLibrary: View {
         }
         .padding(.horizontal, 40).padding(.bottom, 24)
       }
+      .focusable().focused($gridFocused)
       .overlay {
         if pages.isEmpty {
           if favorites.pages.isEmpty {
@@ -379,10 +380,7 @@ private struct FavoriteLibrary: View {
       }
     }
     .padding(.top, 52).background(Color(white: 0.035))
-    .task {
-      await Task.yield()
-      searchFocused = true
-    }
+    .defaultFocus($gridFocused, true)
     .onExitCommand {
       if showOptions { showOptions = false } else { favorites.showAllMedia = false }
     }
