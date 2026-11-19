@@ -236,6 +236,12 @@ private struct FavoriteLibrary: View {
     }
     VStack(spacing: 20) {
       HStack(spacing: 16) {
+        IconButton(symbol: "chevron.backward", label: "Back", help: "Back · Esc") {
+          if showOptions { showOptions = false } else { favorites.showAllMedia = false }
+        }
+        .keyboardShortcut(.cancelAction)
+        .frame(width: 36, height: 36)
+        .glassEffect(.regular.interactive(), in: Circle())
         HStack(spacing: 10) {
           Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
           TextField("Search", text: $search).textFieldStyle(.plain)
@@ -360,7 +366,7 @@ private struct FavoriteLibrary: View {
         }
         .padding(.horizontal, 40).padding(.bottom, 24)
       }
-      .focusable().focused($gridFocused)
+      .focusable().focused($gridFocused).focusEffectDisabled(gridFocused)
       .overlay {
         if pages.isEmpty {
           if favorites.pages.isEmpty {
@@ -381,9 +387,6 @@ private struct FavoriteLibrary: View {
     }
     .padding(.top, 52).background(Color(white: 0.035))
     .defaultFocus($gridFocused, true)
-    .onExitCommand {
-      if showOptions { showOptions = false } else { favorites.showAllMedia = false }
-    }
   }
 }
 
