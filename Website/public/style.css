@@ -169,9 +169,13 @@ h1,
 h2 {
   margin: 0;
   font-size: clamp(36px, 3.4vw, 48px);
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.15;
   letter-spacing: -0.03em;
+}
+h2 {
+  font-weight: 600;
+  color: #a0a0a0;
 }
 .hero h2 a:hover {
   color: var(--text-color);
