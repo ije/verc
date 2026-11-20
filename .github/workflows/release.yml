@@ -24,13 +24,27 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set release version
+      - name: Prepare release version and notes
         run: |
           if [[ ! $GITHUB_REF_NAME =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
             echo '::error::Use a release tag such as v1.2.3.'
             exit 1
           fi
-          plutil -replace CFBundleShortVersionString -string "${GITHUB_REF_NAME#v}" Resources/Info.plist
+          version=${GITHUB_REF_NAME#v}
+          notes="$RUNNER_TEMP/release-notes.md"
+          awk -v version="$version" '
+            /^##[[:space:]]/ {
+              if (found) exit
+              found = (NF == 2 && $2 == version)
+              next
+            }
+            found { print }
+          ' CHANGELOG.md > "$notes"
+          if ! grep -q '[^[:space:]]' "$notes"; then
+            echo "::error::Missing or empty CHANGELOG.md section for $version."
+            exit 1
+          fi
+          plutil -replace CFBundleShortVersionString -string "$version" Resources/Info.plist
           plutil -replace CFBundleVersion -string "$GITHUB_RUN_NUMBER" Resources/Info.plist
 
       - name: Install Apple credentials
@@ -119,16 +133,17 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           assets=(dist/Verc.dmg dist/vlc-3.0.24.tar.xz dist/SHA256SUMS)
+          notes="$RUNNER_TEMP/release-notes.md"
           if gh release view "$GITHUB_REF_NAME" --json isDraft > "$RUNNER_TEMP/release.json"; then
             if ! jq -e '.isDraft' "$RUNNER_TEMP/release.json" > /dev/null; then
               echo '::error::This release is already public. Use a new version tag.'
               exit 1
             fi
             gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
-            gh release edit "$GITHUB_REF_NAME" --draft=false --notes "" --latest
+            gh release edit "$GITHUB_REF_NAME" --draft=false --notes-file "$notes" --latest
           else
             gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
-              --verify-tag --title "Verc $GITHUB_REF_NAME" --notes "" --latest
+              --verify-tag --title "Verc $GITHUB_REF_NAME" --notes-file "$notes" --latest
           fi
 
       - name: Remove Apple credentials
