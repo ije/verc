@@ -257,7 +257,6 @@ try {
       dot.setAttribute("aria-pressed", "false");
     });
     player.dispatchEvent(new Event("scenechange"));
-    search.focus({ preventScroll: true });
   });
   const cards = [...posters.children],
     titles = items.map((item) => item.title.toLowerCase());
