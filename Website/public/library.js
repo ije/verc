@@ -76,7 +76,11 @@ function resize() {
 
 new ResizeObserver(resize).observe(player);
 new IntersectionObserver(
-  ([entry]) => entry.target.classList.toggle("expanded", entry.isIntersecting),
+  ([entry]) => {
+    // Shrink only when the stage leaves through the bottom, so scrolling down past it keeps it expanded.
+    if (entry.isIntersecting || entry.boundingClientRect.top > 0)
+      entry.target.classList.toggle("expanded", entry.isIntersecting);
+  },
   { threshold: 0.85 },
 ).observe(player.parentElement);
 
