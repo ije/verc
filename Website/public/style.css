@@ -1337,6 +1337,9 @@ footer p a:hover {
   .features p {
     font-size: 14px;
   }
+  .features h2 {
+    padding: 0 16px 24px;
+  }
   footer {
     flex-wrap: wrap;
     gap: 16px 4px;
@@ -1348,7 +1351,6 @@ footer p a:hover {
     padding: 0;
     line-height: 1.6;
     text-align: left;
-    text-wrap: balance;
   }
 }
 
