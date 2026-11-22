@@ -73,38 +73,28 @@ canvas {
   border: 1px solid transparent;
   background: none;
   box-shadow:
-    0 8px 24px #0004,
-    0 2px 6px #0003;
+    0 6px 16px #0003,
+    0 1px 3px #0002;
 }
-.glass::before,
 .glass::after {
   content: "";
   position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-}
-/* Keep blur separate: some browsers accept SVG backdrop URLs without rendering them. */
-.glass::before {
-  z-index: -2;
-  clip-path: border-box;
-  backdrop-filter: var(--glass-filter, none);
-}
-.glass::after {
   z-index: -1;
   inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
   clip-path: border-box;
-  background: linear-gradient(
-      150deg,
-      #ffffff1c,
-      #ffffff05 38%,
-      #ffffff00 65%,
-      #ffffff0a
-    )
-    var(--glass-tint, #16181c4d);
-  -webkit-backdrop-filter: blur(var(--glass-blur, 3px)) saturate(160%);
-  backdrop-filter: blur(var(--glass-blur, 3px)) saturate(160%);
-  box-shadow: inset 0 0 0 0.5px #ffffff30;
+  background: var(--glass-tint, #ffffff1a);
+  /* Rim light follows the vertical edge normal, like macOS Liquid Glass: bright top and bottom, faint sides. */
+  box-shadow:
+    inset 0 1px 0 #ffffff59,
+    inset 0 -1px 0 #ffffff59,
+    inset 0 4px 6px -3px #ffffff1f,
+    inset 0 -4px 6px -3px #ffffff1f;
+  /* glass.js sets --glass-filter only in Chromium. Other browsers drop the whole backdrop-filter for SVG URLs. */
+  -webkit-backdrop-filter: blur(var(--glass-blur, 3px)) saturate(150%);
+  backdrop-filter: var(--glass-filter,) blur(var(--glass-blur, 3px))
+    saturate(150%);
   transition: background-color 0.15s;
 }
 
@@ -489,7 +479,6 @@ h2 {
   color: white;
   box-shadow: none;
 }
-.volume-panel::before,
 .volume-panel::after {
   inset: 0 0 -12px;
   border-radius: 0;
@@ -1181,6 +1170,77 @@ h2 {
   }
 }
 
+.features {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  width: 90%;
+  margin-inline: auto;
+  margin-top: clamp(48px, 8vw, 96px);
+  padding-block: clamp(24px, 4vw, 48px);
+  font-size: 15px;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  color: #d4d4d6;
+}
+.features > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 10px;
+  min-height: 104px;
+  padding: 16px;
+  outline: 1px solid #626264;
+  background: linear-gradient(140deg, #ffffff06, #ffffff02);
+}
+.features svg,
+.features img {
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+.features svg {
+  color: var(--text-color);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.features img {
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+}
+.feature-value {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 20px;
+  color: var(--text-color);
+}
+.features p {
+  grid-column: 1 / -1;
+  align-self: center;
+  margin: 0;
+  padding: 16px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+@media (min-width: 1000px) {
+  .features {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .features > div:nth-child(7) {
+    grid-column-start: 2;
+  }
+  .features > div:nth-child(11) {
+    grid-column-start: 1;
+  }
+  .features p {
+    grid-column: 3 / -1;
+  }
+}
+
 footer {
   display: flex;
   align-items: center;
@@ -1253,6 +1313,18 @@ footer p a:hover {
   .player > canvas {
     display: none;
   }
+  .features {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .features > div {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 60px;
+  }
+  .features p {
+    font-size: 14px;
+  }
   footer {
     flex-wrap: wrap;
     gap: 16px 4px;
@@ -1303,7 +1375,6 @@ footer p a:hover {
   .poster-glass {
     background: #242426;
   }
-  .glass::before,
   .glass::after,
   .traffic i,
   .poster-tooltip::before {
@@ -1320,7 +1391,6 @@ footer p a:hover {
   .download {
     border-color: #aaa;
   }
-  .glass::before,
   .glass::after {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;

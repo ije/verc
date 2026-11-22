@@ -5,6 +5,20 @@ svg.setAttribute("focusable", "false");
 svg.innerHTML = "<defs></defs>";
 document.body.append(svg);
 
+// Refraction across a convex squircle bezel (Snell's law, glass n = 1.5), per kube.io/blog/liquid-glass-css-svg.
+// Bezel height equals bezel width, so one unit profile scales to any rim size.
+const squircle = (x) => (1 - (1 - Math.min(1, Math.max(0, x))) ** 4) ** 0.25,
+  profile = new Float32Array(128);
+for (let i = 0; i < 128; i++) {
+  const x = (i + 0.5) / 128,
+    slope = (squircle(x + 0.001) - squircle(x - 0.001)) / 0.002,
+    incident = Math.atan(slope);
+  profile[i] =
+    squircle(x) * Math.tan(incident - Math.asin(Math.sin(incident) / 1.5));
+}
+const peak = Math.max(...profile);
+for (let i = 0; i < 128; i++) profile[i] /= peak;
+
 const canvas = document.createElement("canvas"),
   context = canvas.getContext("2d"),
   filters = new WeakMap();
@@ -40,7 +54,7 @@ const observer = new ResizeObserver((entries) => {
           depth = radius - distance;
         const bend =
           distance && depth >= 0 && depth < rim
-            ? (1 - depth / rim) ** 2 / distance
+            ? profile[Math.floor((depth / rim) * 128)] / distance
             : 0;
         const offset = (y * width + x) * 4;
         map.data[offset] = Math.round(128 - dx * bend * 127);
@@ -49,20 +63,24 @@ const observer = new ResizeObserver((entries) => {
     }
     context.putImageData(map, 0, 0);
     state.filter.innerHTML = `<feImage href="${canvas.toDataURL()}" width="100%" height="100%" preserveAspectRatio="none" result="map" />
-            <feDisplacementMap in="SourceGraphic" in2="map" scale="${rim * 2}" xChannelSelector="R" yChannelSelector="G" />`;
+            <feDisplacementMap in="SourceGraphic" in2="map" scale="${rim * peak * 2}" xChannelSelector="R" yChannelSelector="G" />`;
     target.style.setProperty("--glass-filter", `url(#${state.filter.id})`);
   }
 });
 
-for (const [index, surface] of document.querySelectorAll(".glass").entries()) {
-  const filter = document.createElementNS(svg.namespaceURI, "filter");
-  filter.id = `glass-${index}`;
-  filter.setAttribute("x", "0");
-  filter.setAttribute("y", "0");
-  filter.setAttribute("width", "100%");
-  filter.setAttribute("height", "100%");
-  filter.setAttribute("color-interpolation-filters", "sRGB");
-  svg.firstElementChild.append(filter);
-  filters.set(surface, { filter });
-  observer.observe(surface, { box: "border-box" });
-}
+// Only Chromium renders SVG filters in backdrop-filter.
+if (navigator.userAgentData)
+  for (const [index, surface] of document
+    .querySelectorAll(".glass")
+    .entries()) {
+    const filter = document.createElementNS(svg.namespaceURI, "filter");
+    filter.id = `glass-${index}`;
+    filter.setAttribute("x", "0");
+    filter.setAttribute("y", "0");
+    filter.setAttribute("width", "100%");
+    filter.setAttribute("height", "100%");
+    filter.setAttribute("color-interpolation-filters", "sRGB");
+    svg.firstElementChild.append(filter);
+    filters.set(surface, { filter });
+    observer.observe(surface, { box: "border-box" });
+  }
