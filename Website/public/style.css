@@ -192,7 +192,6 @@ h2 {
   box-shadow:
     inset 0 1px 0 #ffffff16,
     0 4px 18px #0004;
-  backdrop-filter: blur(20px);
   font-size: 15px;
   font-weight: 500;
   letter-spacing: -0.02em;
@@ -697,7 +696,6 @@ h2 {
   mask-image: linear-gradient(#000 calc(100% - 16px), #0000);
 }
 .details h2 {
-  margin: 0;
   color: white;
   font-size: var(--heading-size);
   line-height: 1.2;
@@ -1172,7 +1170,6 @@ h2 {
 
 .features {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1px;
   width: 90%;
   margin-inline: auto;
@@ -1181,6 +1178,13 @@ h2 {
   font-size: 15px;
   line-height: 1.25;
   letter-spacing: -0.02em;
+  color: #d4d4d6;
+}
+.features h2 {
+  grid-column: 1 / -1;
+  padding: 0 16px 30px;
+  font-size: 24px;
+  font-weight: 500;
   color: #d4d4d6;
 }
 .features > div {
@@ -1224,20 +1228,38 @@ h2 {
   margin: 0;
   padding: 16px;
   line-height: 1.5;
+  color: #888;
   text-wrap: pretty;
 }
 @media (min-width: 1000px) {
   .features {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
-  .features > div:nth-child(7) {
+  .features > div:nth-of-type(7) {
     grid-column-start: 2;
   }
-  .features > div:nth-child(11) {
+  .features > div:nth-of-type(11) {
     grid-column-start: 1;
   }
   .features p {
     grid-column: 3 / -1;
+  }
+}
+@media (max-width: 999px) {
+  .features {
+    width: 100%;
+  }
+  .features > div {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 50px;
+    padding-block: 12px;
+    outline: none;
+    border-bottom: 1px solid #222;
+  }
+  .features > div:first-of-type {
+    border-top: 1px solid #222;
   }
 }
 
@@ -1278,7 +1300,6 @@ footer p a:hover {
   }
   .logo img {
     width: 36px;
-    height: auto;
   }
   main {
     margin-top: 32px;
@@ -1313,15 +1334,6 @@ footer p a:hover {
   .player > canvas {
     display: none;
   }
-  .features {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .features > div {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    min-height: 60px;
-  }
   .features p {
     font-size: 14px;
   }
@@ -1353,14 +1365,12 @@ footer p a:hover {
   .player[data-view="trailer"] .traffic,
   .player[data-view="trailer"] .window-title,
   .trailer-close,
-  .dock i {
+  .dock i,
+  #about {
     transition: none;
   }
   .download:active {
     transform: none;
-  }
-  #about {
-    transition: none;
   }
   #about::backdrop {
     transition-duration: 0.12s;
@@ -1368,9 +1378,6 @@ footer p a:hover {
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .download {
-    backdrop-filter: none;
-  }
   .glass::after,
   .poster-glass {
     background: #242426;
@@ -1394,8 +1401,6 @@ footer p a:hover {
   .glass::after {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
-  }
-  .glass::after {
     background: #202022;
     box-shadow: inset 0 0 0 1px #aaa;
   }
