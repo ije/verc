@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4
+
+- Check for updates in the app and install them with one click.
+
 ## 0.1.3
 
 - Open the library with ⇧⌘L. The media grid gets keyboard focus when the library opens.
