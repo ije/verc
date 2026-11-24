@@ -18,7 +18,8 @@ struct VercApp: App {
     .defaultSize(width: 1080, height: 608)
     .commands {
       PlayerCommands(
-        player: delegate.player, favorites: delegate.favorites, showPlaylist: $showPlaylist)
+        player: delegate.player, favorites: delegate.favorites, updater: delegate.updater,
+        showPlaylist: $showPlaylist)
     }
 
     Window("About Verc", id: "about") {
@@ -58,6 +59,7 @@ struct VercApp: App {
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
   let player = PlayerModel()
   let favorites = FavoritePages()
+  let updater = Updater()
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     (AppIcon(rawValue: UserDefaults.standard.string(forKey: "appIcon") ?? "") ?? .glass).apply()
@@ -79,6 +81,7 @@ struct VercApp: App {
           && url == Library.defaultURL
           && !FileManager.default.fileExists(atPath: url.path))
     }
+    updater.check(manual: false)
   }
 
   func application(_ application: NSApplication, open urls: [URL]) {
@@ -118,12 +121,14 @@ extension UTType {
 struct PlayerCommands: Commands {
   @Bindable var player: PlayerModel
   let favorites: FavoritePages
+  let updater: Updater
   @Environment(\.openWindow) private var openWindow
   @Binding var showPlaylist: Bool
 
   var body: some Commands {
     CommandGroup(replacing: .appInfo) {
       Button("About Verc") { openWindow(id: "about") }
+      Button("Check for Updates…") { updater.check(manual: true) }.disabled(updater.busy)
     }
     CommandGroup(replacing: .appSettings) {
       Button("App Icon…") {
