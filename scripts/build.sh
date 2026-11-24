@@ -52,7 +52,8 @@ while IFS= read -r name; do
   plugin_count=$((plugin_count + 1))
 done <<< "$plugins"
 
-swift=(swift build --disable-sandbox --cache-path .build/cache -c "$config" --arch arm64)
+swift=(swift build --disable-sandbox --cache-path .build/cache -c "$config" --arch arm64
+  -Xlinker -rpath -Xlinker @executable_path/../Frameworks)
 if [[ $config == release ]]; then swift+=(-Xswiftc -Osize); fi
 "${swift[@]}" || fail "Swift build failed."
 rm -rf "$app"
@@ -60,8 +61,21 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 location=$("${swift[@]}" --show-bin-path) || fail "Cannot locate the compiled app."
 cp "$location/Verc" "$app/Contents/MacOS/Verc"
 cp Resources/Info.plist "$app/Contents/Info.plist"
+if [[ -n ${SPARKLE_PUBLIC_ED_KEY:-} ]]; then
+  plutil -insert SUPublicEDKey -string "$SPARKLE_PUBLIC_ED_KEY" "$app/Contents/Info.plist"
+fi
 cp Resources/app.icns Resources/Verc.png Resources/VercGlass.png Resources/VercPrism.png Resources/VercLibrary.icns Resources/TMDB.svg Resources/LineMD-LICENSE.txt Resources/Vgpu-LICENSE.txt LICENSE NOTICE "$app/Contents/Resources/"
 cp Vendor/VLC/COPYING.LIB "$app/Contents/Resources/VLC-COPYING.LIB.txt"
+framework="$app/Contents/Frameworks/Sparkle.framework"
+# Sparkle's XPC services are only needed for sandboxed apps.
+mkdir -p "$framework"
+rsync -a --exclude XPCServices --exclude Headers --exclude PrivateHeaders --exclude Modules \
+  "$location/Sparkle.framework/" "$framework/"
+sparkle="$framework/Versions/Current"
+for binary in "$sparkle/Sparkle" "$sparkle/Autoupdate" "$sparkle/Updater.app/Contents/MacOS/Updater"; do
+  if [[ $(lipo -archs "$binary") != arm64 ]]; then lipo "$binary" -thin arm64 -output "$binary"; fi
+done
+cp "$root/.build/artifacts/sparkle/Sparkle/LICENSE" "$app/Contents/Resources/Sparkle-LICENSE.txt"
 xcrun -sdk macosx metal -mmacos-version-min=26.0 Sources/Verc/Prism.metal -o "$app/Contents/Resources/default.metallib" \
   || fail "Cannot compile the Metal shaders. Install the Metal Toolchain: xcodebuild -downloadComponent MetalToolchain"
 
@@ -107,6 +121,9 @@ sign=(codesign --force --sign "${SIGNING_IDENTITY:--}")
 if [[ ${SIGNING_IDENTITY:--} != - ]]; then
   sign+=(--timestamp --options runtime)
 fi
+"${sign[@]}" "$sparkle/Autoupdate"
+"${sign[@]}" "$sparkle/Updater.app"
+"${sign[@]}" "$framework"
 while IFS= read -r -d '' file; do
   "${sign[@]}" "$file" || fail "Cannot sign library: $file"
 done < <(find "$destination" -type f -name '*.dylib' -print0)

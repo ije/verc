@@ -63,6 +63,8 @@ Use `./scripts/build.sh --debug` for a debug build.
 
 A tag push to GitHub starts the release workflow.
 
+For Sparkle updates, run `.build/artifacts/sparkle/Sparkle/bin/generate_keys --account Verc` once after building. Save the public key as the GitHub Actions secret `SPARKLE_PUBLIC_ED_KEY`. Export the matching private key with `-x` and save it as `SPARKLE_PRIVATE_ED_KEY` in repository secrets.
+
 ## Website
 
 `Website/` uses TypeScript ES modules and Cloudflare Workers. All code in `index.ts`, static assets are under `public/` dir. With two routes:

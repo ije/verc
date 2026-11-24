@@ -7,6 +7,10 @@ Verc is free software. You can redistribute it and modify it under the GNU
 General Public License, version 2, as published by the Free Software Foundation.
 Verc comes without any warranty. See LICENSE for the full terms.
 
+Verc uses Sparkle for software updates. The app includes Sparkle's license
+and third-party notices in Sparkle-LICENSE.txt.
+Source: https://sparkle-project.org/
+
 Verc uses libVLC's public C API and VLC's filter interfaces. The
 standalone build includes selected VLC 3.x libraries and playback plugins.
 VLC and libVLC retain their own licenses and copyrights. Build-only plugin

@@ -81,7 +81,6 @@ struct VercApp: App {
           && url == Library.defaultURL
           && !FileManager.default.fileExists(atPath: url.path))
     }
-    updater.check(manual: false)
   }
 
   func application(_ application: NSApplication, open urls: [URL]) {
@@ -121,14 +120,19 @@ extension UTType {
 struct PlayerCommands: Commands {
   @Bindable var player: PlayerModel
   let favorites: FavoritePages
-  let updater: Updater
+  @ObservedObject var updater: Updater
   @Environment(\.openWindow) private var openWindow
   @Binding var showPlaylist: Bool
 
   var body: some Commands {
     CommandGroup(replacing: .appInfo) {
       Button("About Verc") { openWindow(id: "about") }
-      Button("Check for Updates…") { updater.check(manual: true) }.disabled(updater.busy)
+      if let controller = updater.controller {
+        Button("Check for Updates…") { controller.checkForUpdates(nil) }
+          .disabled(!updater.canCheckForUpdates)
+      } else {
+        Link("Check for Updates…", destination: URL(string: "https://github.com/ije/verc/releases/latest")!)
+      }
     }
     CommandGroup(replacing: .appSettings) {
       Button("App Icon…") {

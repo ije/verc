@@ -89,7 +89,11 @@ jobs:
           xcodebuild -downloadComponent MetalToolchain
 
       - name: Build and sign
-        run: ./scripts/build.sh
+        env:
+          SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
+        run: |
+          : "${SPARKLE_PUBLIC_ED_KEY:?Set the SPARKLE_PUBLIC_ED_KEY repository secret.}"
+          ./scripts/build.sh
 
       - name: Notarize and staple
         run: |
@@ -127,12 +131,26 @@ jobs:
           cd dist
           shasum -a 256 Verc.dmg vlc-3.0.24.tar.xz > SHA256SUMS
 
+      - name: Sign the Sparkle update and feed
+        env:
+          SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
+        run: |
+          : "${SPARKLE_PRIVATE_ED_KEY:?Set the SPARKLE_PRIVATE_ED_KEY repository secret.}"
+          updates="$RUNNER_TEMP/updates"
+          mkdir -p "$updates"
+          cp dist/Verc.dmg "$updates/Verc.dmg"
+          cp "$RUNNER_TEMP/release-notes.md" "$updates/Verc.md"
+          .build/artifacts/sparkle/Sparkle/bin/generate_appcast --ed-key-file - --embed-release-notes \
+            --download-url-prefix "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/" \
+            -o dist/appcast.xml "$updates" <<< "$SPARKLE_PRIVATE_ED_KEY"
+          xmllint --xpath '/rss/channel/item/enclosure/@*[local-name()="edSignature"]' dist/appcast.xml > /dev/null
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          assets=(dist/Verc.dmg dist/vlc-3.0.24.tar.xz dist/SHA256SUMS)
+          assets=(dist/Verc.dmg dist/appcast.xml dist/vlc-3.0.24.tar.xz dist/SHA256SUMS)
           notes="$RUNNER_TEMP/release-notes.md"
           if gh release view "$GITHUB_REF_NAME" --json isDraft > "$RUNNER_TEMP/release.json"; then
             if ! jq -e '.isDraft' "$RUNNER_TEMP/release.json" > /dev/null; then
