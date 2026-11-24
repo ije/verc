@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5
+
+- Verc now uses Sparkle for signed in-app updates. You can turn on automatic update checks or check from the Verc menu.
+
 ## 0.1.4
 
 - Check for updates in the app and install them with one click.
