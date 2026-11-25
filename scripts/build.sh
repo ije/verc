@@ -62,7 +62,7 @@ location=$("${swift[@]}" --show-bin-path) || fail "Cannot locate the compiled ap
 cp "$location/Verc" "$app/Contents/MacOS/Verc"
 cp Resources/Info.plist "$app/Contents/Info.plist"
 if [[ -n ${SPARKLE_PUBLIC_ED_KEY:-} ]]; then
-  plutil -insert SUPublicEDKey -string "$SPARKLE_PUBLIC_ED_KEY" "$app/Contents/Info.plist"
+  plutil -replace SUPublicEDKey -string "$SPARKLE_PUBLIC_ED_KEY" "$app/Contents/Info.plist"
 fi
 cp Resources/app.icns Resources/Verc.png Resources/VercGlass.png Resources/VercPrism.png Resources/VercLibrary.icns Resources/TMDB.svg Resources/LineMD-LICENSE.txt Resources/Vgpu-LICENSE.txt LICENSE NOTICE "$app/Contents/Resources/"
 cp Vendor/VLC/COPYING.LIB "$app/Contents/Resources/VLC-COPYING.LIB.txt"

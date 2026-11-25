@@ -4,6 +4,7 @@ import SwiftUI
 struct ContentView: View {
   @Bindable var player: PlayerModel
   @Bindable var favorites: FavoritePages
+  let updateDriver: UpdateDriver
   @Binding var showPlaylist: Bool
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -25,6 +26,10 @@ struct ContentView: View {
   private var modal: Bool {
     player.showInfo || player.showURL || player.showIconPicker || favorites.draft != nil
       || player.pendingPlayback != nil
+  }
+  private var updateBesideNavigation: Bool {
+    player.current == nil && !favorites.pages.isEmpty && !favorites.showAllMedia && favorites.ready
+      && !modal && player.popup == nil
   }
   private var hasAudioChoice: Bool {
     player.audioTracks.lazy.filter { $0.id != -1 }.prefix(2).count > 1
@@ -63,7 +68,7 @@ struct ContentView: View {
   private var playerCanvas: some View {
     ZStack {
       if player.current == nil {
-        StartPage(player: player, favorites: favorites)
+        StartPage(player: player, favorites: favorites, updateDriver: updateBesideNavigation ? updateDriver : nil)
           .id(favorites.url)
           .disabled(!favorites.ready)
           .allowsHitTesting(player.popup == nil)
@@ -346,6 +351,13 @@ struct ContentView: View {
             }
           }
           .preferredColorScheme(.dark)
+        }
+      }
+      .overlay(alignment: .bottomTrailing) {
+        if !updateBesideNavigation {
+          UpdateBar(driver: updateDriver)
+            .padding(.trailing, 16)
+            .padding(.bottom, player.current != nil && controlsVisible ? 66 : 16)
         }
       }
       .alert(

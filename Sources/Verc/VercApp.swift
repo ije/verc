@@ -10,7 +10,8 @@ struct VercApp: App {
   var body: some Scene {
     Window("Verc", id: "player") {
       ContentView(
-        player: delegate.player, favorites: delegate.favorites, showPlaylist: $showPlaylist
+        player: delegate.player, favorites: delegate.favorites, updateDriver: delegate.updater.driver,
+        showPlaylist: $showPlaylist
       )
       .frame(minWidth: 640, minHeight: 360)
     }
@@ -62,6 +63,16 @@ struct VercApp: App {
   let updater = Updater()
 
   func applicationDidFinishLaunching(_ notification: Notification) {
+    do {
+      try updater.engine.start()
+      // The zero Sparkle interval disables its timer. Honor any earlier opt-out at launch.
+      let defaults = UserDefaults.standard
+      if defaults.object(forKey: "SUEnableAutomaticChecks") == nil || defaults.bool(forKey: "SUEnableAutomaticChecks") {
+        updater.engine.checkForUpdatesInBackground()
+      }
+    } catch {
+      updater.driver.notice = .init(kind: .error, title: error.localizedDescription)
+    }
     (AppIcon(rawValue: UserDefaults.standard.string(forKey: "appIcon") ?? "") ?? .glass).apply()
     NSApp.activate(ignoringOtherApps: true)
     player.openLibrary = { [weak self] urls in
@@ -127,11 +138,14 @@ struct PlayerCommands: Commands {
   var body: some Commands {
     CommandGroup(replacing: .appInfo) {
       Button("About Verc") { openWindow(id: "about") }
-      if let controller = updater.controller {
-        Button("Check for Updates…") { controller.checkForUpdates(nil) }
-          .disabled(!updater.canCheckForUpdates)
+      if let item = updater.driver.notice, item.kind == .progress, item.dismiss != nil {
+        Button("Cancel Update") { updater.driver.respond(to: item) }
       } else {
-        Link("Check for Updates…", destination: URL(string: "https://github.com/ije/verc/releases/latest")!)
+        Button("Check for Updates…") {
+          openWindow(id: "player")
+          if !updater.engine.sessionInProgress { updater.engine.checkForUpdates() }
+        }
+        .disabled(!updater.canCheckForUpdates && !(updater.engine.sessionInProgress && updater.driver.notice != nil))
       }
     }
     CommandGroup(replacing: .appSettings) {

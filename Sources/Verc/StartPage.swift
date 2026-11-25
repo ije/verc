@@ -10,6 +10,7 @@ import simd
 struct StartPage: View {
   let player: PlayerModel
   let favorites: FavoritePages
+  let updateDriver: UpdateDriver?
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   // Trails favorites.selection by one update. A removed page keeps the transition from its last render,
   // so it must render the new direction before it leaves.
@@ -19,9 +20,10 @@ struct StartPage: View {
   @State private var libraryHovered = false
   @State private var addHovered = false
 
-  init(player: PlayerModel, favorites: FavoritePages) {
+  init(player: PlayerModel, favorites: FavoritePages, updateDriver: UpdateDriver?) {
     self.player = player
     self.favorites = favorites
+    self.updateDriver = updateDriver
     _shown = State(initialValue: favorites.selection)
   }
 
@@ -82,45 +84,49 @@ struct StartPage: View {
       .overlay { if page == nil && !favorites.showAllMedia { PlayerContextMenu(player: player) } }
       .overlay(alignment: .bottom) {
         if !favorites.pages.isEmpty && !favorites.showAllMedia {
-          HStack(spacing: 4) {
-            FavoriteDots(
-              favorites: favorites, shown: shown, tooltip: $tooltip, sorting: $sortingDots)
-            Button {
-              tooltip = nil
-              favorites.showAllMedia = true
-            } label: {
-              Image(systemName: "play.square.stack.fill").font(.system(size: 15, weight: .medium))
-                .foregroundStyle(.white.opacity(libraryHovered ? 1 : 0.7))
-                .frame(width: 32, height: 36).contentShape(Rectangle())
-            }
-            .buttonStyle(.plain).help("Library · ⇧⌘L").accessibilityLabel("Library")
-            .onHover { libraryHovered = $0 }
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: libraryHovered)
-            Rectangle().fill(.white.opacity(0.15)).frame(width: 1, height: 20).padding(
-              .horizontal, 4)
-            Button {
-              let panel = NSOpenPanel()
-              panel.title = "Choose Media Files or Folders"
-              panel.prompt = "Choose"
-              panel.canChooseDirectories = true
-              panel.allowsMultipleSelection = true
-              panel.allowedContentTypes = MediaItem.libraryTypes
-              panel.begin { response in
-                if response == .OK { favorites.prepareDraft(panel.urls, player: player) }
+          StartPageFooter {
+            HStack(spacing: 4) {
+              FavoriteDots(
+                favorites: favorites, shown: shown, tooltip: $tooltip, sorting: $sortingDots)
+              Button {
+                tooltip = nil
+                favorites.showAllMedia = true
+              } label: {
+                Image(systemName: "play.square.stack.fill").font(.system(size: 15, weight: .medium))
+                  .foregroundStyle(.white.opacity(libraryHovered ? 1 : 0.7))
+                  .frame(width: 32, height: 36).contentShape(Rectangle())
               }
-            } label: {
-              Image(systemName: "plus").font(.system(size: 15, weight: .medium))
-                .foregroundStyle(.white.opacity(addHovered ? 1 : 0.7))
-                .frame(width: 32, height: 36).contentShape(Rectangle())
+              .buttonStyle(.plain).help("Library · ⇧⌘L").accessibilityLabel("Library")
+              .onHover { libraryHovered = $0 }
+              .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: libraryHovered)
+              Rectangle().fill(.white.opacity(0.15)).frame(width: 1, height: 20).padding(
+                .horizontal, 4)
+              Button {
+                let panel = NSOpenPanel()
+                panel.title = "Choose Media Files or Folders"
+                panel.prompt = "Choose"
+                panel.canChooseDirectories = true
+                panel.allowsMultipleSelection = true
+                panel.allowedContentTypes = MediaItem.libraryTypes
+                panel.begin { response in
+                  if response == .OK { favorites.prepareDraft(panel.urls, player: player) }
+                }
+              } label: {
+                Image(systemName: "plus").font(.system(size: 15, weight: .medium))
+                  .foregroundStyle(.white.opacity(addHovered ? 1 : 0.7))
+                  .frame(width: 32, height: 36).contentShape(Rectangle())
+              }
+              .buttonStyle(.plain).help("Add to Library…").accessibilityLabel("Add to Library")
+              .onHover { addHovered = $0 }
+              .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: addHovered)
+              .disabled(!favorites.ready || favorites.saving)
             }
-            .buttonStyle(.plain).help("Add to Library…").accessibilityLabel("Add to Library")
-            .onHover { addHovered = $0 }
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: addHovered)
-            .disabled(!favorites.ready || favorites.saving)
+            .padding(.horizontal, 8)
+            .glassEffect(.regular.tint(.black.opacity(0.2)), in: Capsule())
+            .overlay { PageScroll(favorites: favorites) }
+            if let updateDriver { UpdateBar(driver: updateDriver) }
           }
-          .padding(.horizontal, 8)
-          .glassEffect(.regular.tint(.black.opacity(0.2)), in: Capsule())
-          .overlay { PageScroll(favorites: favorites) }
+          .padding(.horizontal, 16)
           .padding(.bottom, 24)
         }
       }
@@ -152,6 +158,30 @@ struct StartPage: View {
     .onChange(of: favorites.selection) {
       withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.4)) { shown = favorites.selection }
     }
+  }
+}
+
+private struct StartPageFooter: Layout {
+  private func sizes(width: CGFloat, subviews: Subviews) -> (navigation: CGSize, update: CGSize) {
+    let navigation = subviews[0].sizeThatFits(.unspecified)
+    let available = max(0, width - navigation.width - 8)
+    let update = subviews.dropFirst().first?.sizeThatFits(.init(width: available, height: nil)) ?? .zero
+    return (navigation, update)
+  }
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    let width = proposal.width ?? subviews[0].sizeThatFits(.unspecified).width
+    let row = sizes(width: width, subviews: subviews)
+    return CGSize(width: width, height: max(row.navigation.height, row.update.height))
+  }
+
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    let row = sizes(width: bounds.width, subviews: subviews)
+    let centerX = min(bounds.midX, bounds.maxX - row.update.width - 8 - row.navigation.width / 2)
+    subviews[0].place(at: CGPoint(x: centerX, y: bounds.midY),
+                      anchor: .center, proposal: ProposedViewSize(row.navigation))
+    subviews.dropFirst().first?.place(at: CGPoint(x: bounds.maxX, y: bounds.midY),
+                                     anchor: .trailing, proposal: ProposedViewSize(row.update))
   }
 }
 
